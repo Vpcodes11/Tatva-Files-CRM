@@ -1,0 +1,15 @@
+name = "tatva-crm"
+main = "src/worker.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tatva-crm"
+# Cloudflare D1 database (already created in the Tatva Cloudflare account)
+database_id = "706371f8-abd8-4bef-9e18-f15875f07133"

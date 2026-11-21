@@ -1,0 +1,4 @@
+node_modules/
+.wrangler/
+# client data - never put this in a public repository
+data/

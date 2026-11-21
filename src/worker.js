@@ -1,0 +1,375 @@
+// Tatva CRM · Files module · server (Cloudflare Worker + D1)
+// Serves the app from /public and a small JSON API under /api.
+
+const ROLES = ['Agent', 'Admin', 'Super admin'];
+const SESSION_DAYS = 30;
+const MAX_FAILED = 8;          // failed logins before a 15-minute lock
+const COLLS = new Set(['visits', 'clients', 'bookings', 'payments', 'plots', 'expenses', 'landowners', 'advances',
+  'incentives', 'registry', 'dastavej', 'ledger', 'contractors', 'plotOwners']);
+
+// ---------- database tables (created automatically the first time) ----------
+const SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS records (coll TEXT NOT NULL, id TEXT NOT NULL, sr INTEGER, data TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), updated_by TEXT, PRIMARY KEY (coll, id))`,
+  `CREATE INDEX IF NOT EXISTS records_coll_sr ON records (coll, sr)`,
+  `CREATE TABLE IF NOT EXISTS edits (id INTEGER PRIMARY KEY AUTOINCREMENT, coll TEXT NOT NULL, rec_id TEXT NOT NULL, field TEXT NOT NULL, old TEXT, new TEXT, label TEXT, undone INTEGER NOT NULL DEFAULT 0, undo_of INTEGER, user_id INTEGER, user_name TEXT, role TEXT, at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`,
+  `CREATE INDEX IF NOT EXISTS edits_rec ON edits (coll, rec_id)`,
+  `CREATE TABLE IF NOT EXISTS steps (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, data TEXT NOT NULL, user_id INTEGER, user_name TEXT, role TEXT, at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`,
+  `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('Agent','Admin','Super admin')), pass_hash TEXT NOT NULL, salt TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, failed INTEGER NOT NULL DEFAULT 0, locked_until TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), last_login TEXT)`,
+  `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)`,
+  `INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '0')`
+];
+let schemaReady = false;
+async function ensureSchema(env) {
+  if (schemaReady) return;
+  await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
+  schemaReady = true;
+}
+
+// ---------- helpers ----------
+const json = (data, status = 200, headers = {}) =>
+  new Response(JSON.stringify(data), {status, headers: {'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers}});
+const fail = (status, error) => json({error}, status);
+const now = () => new Date().toISOString();
+const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+const randomHex = n => hex(crypto.getRandomValues(new Uint8Array(n)));
+
+async function hashPassword(password, saltHex) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const salt = new Uint8Array(saltHex.match(/../g).map(h => parseInt(h, 16)));
+  const bits = await crypto.subtle.deriveBits({name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 100000}, key, 256);
+  return hex(bits);
+}
+function safeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+const cookieOf = (req, name) => {
+  const m = (req.headers.get('cookie') || '').match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
+  return m ? m[1] : null;
+};
+const sessionCookie = (token, maxAge) =>
+  `sid=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+const publicUser = u => u && ({id: u.id, username: u.username, name: u.name, role: u.role, active: !!u.active, last_login: u.last_login, created_at: u.created_at});
+
+function validPassword(p) { return typeof p === 'string' && p.length >= 6 && p.length <= 200; }
+function validUsername(u) { return typeof u === 'string' && /^[a-zA-Z0-9._-]{3,40}$/.test(u); }
+
+async function currentUser(env, req) {
+  const token = cookieOf(req, 'sid');
+  if (!token) return null;
+  const row = await env.DB.prepare(
+    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ? AND u.active = 1`
+  ).bind(token, now()).first();
+  return row || null;
+}
+
+// The same lock rules the screen shows: an Agent cannot change a Converted visit or booking.
+const isConvertedVisitStatus = s => { const x = String(s || '').toUpperCase(); return !x.includes('NOT') && !x.includes('FOLLOW') && (x === 'DONE' || x.includes('CONVERT')); };
+const isConvertedOutcome = s => /convert/i.test(String(s || ''));
+function lockError(user, coll, current, next) {
+  if (user.role !== 'Agent') return null;
+  if (coll === 'visits' && current && isConvertedVisitStatus(current.status) && next && !isConvertedVisitStatus(next.status))
+    return 'This visit is Converted. Only Admin or Super admin can change it.';
+  if (coll === 'bookings' && current && isConvertedOutcome(current.outcome) && next && !isConvertedOutcome(next.outcome))
+    return 'This booking is Converted. Only Admin or Super admin can change it.';
+  return null;
+}
+
+// ---------- API handlers ----------
+async function apiMe(env, req) {
+  const user = await currentUser(env, req);
+  if (user) return json({user: publicUser(user)});
+  const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first('n');
+  return json({user: null, setup: count === 0});
+}
+
+async function apiSetup(env, req) {
+  const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM users').first('n');
+  if (count > 0) return fail(403, 'Setup is already done. Please sign in.');
+  const b = await req.json().catch(() => ({}));
+  const name = String(b.name || '').trim();
+  if (!name) return fail(400, 'Enter your name.');
+  if (!validUsername(b.username)) return fail(400, 'Username: 3–40 letters or numbers (dot, dash and underscore are fine).');
+  if (!validPassword(b.password)) return fail(400, 'Password must have at least 6 characters.');
+  const salt = randomHex(16);
+  await env.DB.prepare('INSERT INTO users (username, name, role, pass_hash, salt) VALUES (?, ?, ?, ?, ?)')
+    .bind(b.username, name, 'Super admin', await hashPassword(b.password, salt), salt).run();
+  return login(env, b.username, b.password);
+}
+
+async function login(env, username, password) {
+  const u = await env.DB.prepare('SELECT * FROM users WHERE username = ?').bind(String(username || '')).first();
+  const bad = () => fail(401, 'Wrong username or password.');
+  if (!u) { await hashPassword(String(password || 'x'), randomHex(16)); return bad(); }
+  if (!u.active) return fail(403, 'This user has been switched off. Ask an admin.');
+  if (u.locked_until && u.locked_until > now()) return fail(429, 'Too many wrong passwords. Try again in 15 minutes.');
+  const h = await hashPassword(String(password || ''), u.salt);
+  if (!safeEqual(h, u.pass_hash)) {
+    const failed = u.failed + 1;
+    const lock = failed >= MAX_FAILED ? new Date(Date.now() + 15 * 60e3).toISOString() : null;
+    await env.DB.prepare('UPDATE users SET failed = ?, locked_until = ? WHERE id = ?').bind(lock ? 0 : failed, lock, u.id).run();
+    return bad();
+  }
+  const token = randomHex(32);
+  const exp = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').bind(token, u.id, exp),
+    env.DB.prepare('UPDATE users SET failed = 0, locked_until = NULL, last_login = ? WHERE id = ?').bind(now(), u.id),
+    env.DB.prepare('DELETE FROM sessions WHERE expires_at < ?').bind(now())
+  ]);
+  return json({user: publicUser({...u, last_login: now()})}, 200, {'set-cookie': sessionCookie(token, SESSION_DAYS * 86400)});
+}
+
+async function apiLogin(env, req) {
+  const b = await req.json().catch(() => ({}));
+  return login(env, b.username, b.password);
+}
+
+async function apiLogout(env, req) {
+  const token = cookieOf(req, 'sid');
+  if (token) await env.DB.prepare('DELETE FROM sessions WHERE token = ?').bind(token).run();
+  return json({ok: true}, 200, {'set-cookie': sessionCookie('', 0)});
+}
+
+async function apiData(env) {
+  const [recs, edits, steps, version] = await env.DB.batch([
+    env.DB.prepare('SELECT coll, id, sr, data FROM records'),
+    env.DB.prepare('SELECT id, coll, rec_id, field, old, new, label, undone, undo_of, user_name, role, at FROM edits ORDER BY id'),
+    env.DB.prepare('SELECT id, type, data, user_name, role, at FROM steps ORDER BY id'),
+    env.DB.prepare("SELECT value FROM meta WHERE key = 'version'")
+  ]);
+  const D = {visits: [], clients: [], bookings: [], payments: [], expenses: [], landowners: [], advances: [], incentives: [],
+    contractors: [], plots: {}, registry: {}, dastavej: {}, plotOwners: {}, summary: {}};
+  const ledger = [];
+  for (const r of recs.results) {
+    const o = JSON.parse(r.data);
+    if (r.coll === 'plotOwners') { D.plotOwners[r.id] = o; continue; }
+    if (r.coll === 'meta') { D[r.id] = o; continue; }
+    if (r.coll === 'ledger') { ledger.push(o); continue; }
+    if (D[r.coll] && Array.isArray(D[r.coll])) D[r.coll].push(o);
+    else if (D[r.coll]) D[r.coll][r.id] = o;
+  }
+  const byRow = (a, b) => (a.row || 0) - (b.row || 0) || (a.sr || 0) - (b.sr || 0);
+  ['visits', 'bookings', 'payments', 'expenses', 'landowners', 'advances', 'incentives'].forEach(k => D[k].sort(byRow));
+  D.clients.sort((a, b) => (a.sr || 0) - (b.sr || 0));
+  D.contractors.forEach(c => { c.ledger = ledger.filter(l => l.contractor === c.name).sort(byRow); });
+  return json({
+    empty: recs.results.length === 0,
+    data: D,
+    edits: edits.results.map(e => ({...e, old: JSON.parse(e.old), new: JSON.parse(e.new), undone: !!e.undone})),
+    steps: steps.results.map(s => ({...s, data: JSON.parse(s.data)})),
+    version: Number(version.results[0] ? version.results[0].value : 0)
+  });
+}
+
+async function apiVersion(env) {
+  const v = await env.DB.prepare("SELECT value FROM meta WHERE key = 'version'").first('value');
+  return json({version: Number(v || 0)});
+}
+
+// Apply a list of changes in one go (all or nothing).
+// patch: {op:'patch', coll, id, field, value, label, undoOf?}
+// put:   {op:'put', coll, id, data, newSr?}   (create or replace a whole record)
+// step:  {op:'step', type, data}               (a hold / booking / payment / lapse / new visit, for the history list)
+async function apiOps(env, req, user) {
+  const b = await req.json().catch(() => null);
+  const ops = b && Array.isArray(b.ops) ? b.ops : null;
+  if (!ops || !ops.length || ops.length > 50) return fail(400, 'Nothing to save.');
+  const stmts = [];
+  const assigned = {};
+  const maxSr = {};
+  const getRec = async (coll, id) => {
+    const r = await env.DB.prepare('SELECT data FROM records WHERE coll = ? AND id = ?').bind(coll, id).first();
+    return r ? JSON.parse(r.data) : null;
+  };
+  const working = {}; // records changed earlier in this same request
+  for (const op of ops) {
+    if (op.op === 'patch' || op.op === 'put') {
+      if (!COLLS.has(op.coll) || typeof op.id !== 'string' || !op.id || op.id.length > 100) return fail(400, 'Unknown record.');
+    }
+    if (op.op === 'patch') {
+      if (typeof op.field !== 'string' || !/^[A-Za-z0-9_]{1,40}$/.test(op.field) || ['id', 'sr'].includes(op.field)) return fail(400, 'This field cannot be changed.');
+      const key = op.coll + '|' + op.id;
+      const cur = working[key] || await getRec(op.coll, op.id);
+      if (!cur) return fail(404, 'This record no longer exists. Refresh the page.');
+      const next = {...cur, [op.field]: op.value === undefined ? null : op.value};
+      const lock = lockError(user, op.coll, cur, next);
+      if (lock) return fail(403, lock);
+      working[key] = next;
+      stmts.push(env.DB.prepare('UPDATE records SET data = ?, updated_at = ?, updated_by = ? WHERE coll = ? AND id = ?')
+        .bind(JSON.stringify(next), now(), user.name, op.coll, op.id));
+      if (!op.silent) stmts.push(env.DB.prepare('INSERT INTO edits (coll, rec_id, field, old, new, label, undo_of, user_id, user_name, role) VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .bind(op.coll, op.id, op.field, JSON.stringify(cur[op.field] ?? null), JSON.stringify(next[op.field]), String(op.label || '').slice(0, 300), op.undoOf || null, user.id, user.name, user.role));
+      if (op.undoOf) stmts.push(env.DB.prepare('UPDATE edits SET undone = 1 WHERE id = ?').bind(op.undoOf));
+    } else if (op.op === 'put') {
+      const data = op.data;
+      if (op.coll === 'plotOwners' ? typeof data !== 'string' : (!data || typeof data !== 'object' || Array.isArray(data))) return fail(400, 'Bad record.');
+      const key = op.coll + '|' + op.id;
+      const cur = working[key] || await getRec(op.coll, op.id);
+      const lock = lockError(user, op.coll, cur, data);
+      if (lock) return fail(403, lock);
+      if (op.coll === 'plotOwners') {
+        stmts.push(env.DB.prepare(`INSERT INTO records (coll, id, sr, data, updated_at, updated_by) VALUES (?,?,NULL,?,?,?)
+          ON CONFLICT (coll, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+          .bind(op.coll, op.id, JSON.stringify(data), now(), user.name));
+        continue;
+      }
+      let sr = data.sr ?? null;
+      if (op.newSr && !cur) {
+        if (maxSr[op.coll] === undefined) maxSr[op.coll] = Number(await env.DB.prepare('SELECT COALESCE(MAX(sr), 0) AS m FROM records WHERE coll = ?').bind(op.coll).first('m'));
+        sr = ++maxSr[op.coll];
+        data.sr = sr; assigned[key] = sr;
+      } else if (cur && cur.sr != null) { sr = cur.sr; data.sr = cur.sr; }
+      if (op.coll !== 'plotOwners') data.id = op.id;
+      working[key] = data;
+      stmts.push(env.DB.prepare(`INSERT INTO records (coll, id, sr, data, updated_at, updated_by) VALUES (?,?,?,?,?,?)
+        ON CONFLICT (coll, id) DO UPDATE SET sr = excluded.sr, data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+        .bind(op.coll, op.id, sr, JSON.stringify(data), now(), user.name));
+    } else if (op.op === 'step') {
+      if (!['hold', 'book', 'pay', 'lapse', 'visit', 'expense'].includes(op.type)) return fail(400, 'Unknown step.');
+      stmts.push(env.DB.prepare('INSERT INTO steps (type, data, user_id, user_name, role) VALUES (?,?,?,?,?)')
+        .bind(op.type, JSON.stringify(op.data || {}), user.id, user.name, user.role));
+    } else return fail(400, 'Unknown change.');
+  }
+  stmts.push(env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'"));
+  await env.DB.batch(stmts);
+  const version = await env.DB.prepare("SELECT value FROM meta WHERE key = 'version'").first('value');
+  const edits = await env.DB.prepare('SELECT id, coll, rec_id, field, old, new, label, undone, undo_of, user_name, role, at FROM edits WHERE user_id = ? ORDER BY id DESC LIMIT ?')
+    .bind(user.id, ops.filter(o => o.op === 'patch' && !o.silent).length || 0).all();
+  return json({ok: true, sr: assigned, version: Number(version),
+    edits: edits.results.reverse().map(e => ({...e, old: JSON.parse(e.old), new: JSON.parse(e.new), undone: !!e.undone}))});
+}
+
+// ---------- one-time import of the sheet data (Super admin, empty database only) ----------
+async function apiImport(env, req, user) {
+  if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can load the sheet data.');
+  const n = await env.DB.prepare('SELECT COUNT(*) AS n FROM records').first('n');
+  if (n > 0) return fail(409, 'The data is already loaded.');
+  const b = await req.json().catch(() => null);
+  const recs = b && Array.isArray(b.records) ? b.records : null;
+  if (!recs || !recs.length) return fail(400, 'This file has no records.');
+  for (const r of recs) if (!r || typeof r.coll !== 'string' || typeof r.id !== 'string' || r.data === undefined) return fail(400, 'This is not the Tatva data file.');
+  const stmts = [];
+  for (let i = 0; i < recs.length; i += 20) {
+    const chunk = recs.slice(i, i + 20);
+    stmts.push(env.DB.prepare('INSERT INTO records (coll, id, sr, data, updated_by) VALUES ' + chunk.map(() => "(?,?,?,?,'import')").join(','))
+      .bind(...chunk.flatMap(r => [r.coll, r.id, r.sr ?? null, JSON.stringify(r.data)])));
+  }
+  for (let i = 0; i < stmts.length; i += 40) await env.DB.batch(stmts.slice(i, i + 40));
+  await env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'").run();
+  return json({ok: true, records: recs.length});
+}
+
+// ---------- users ----------
+const canManageUsers = u => u.role === 'Admin' || u.role === 'Super admin';
+
+async function apiUsers(env, req, user) {
+  if (!canManageUsers(user)) return fail(403, 'Only Admin or Super admin can manage users.');
+  if (req.method === 'GET') {
+    const r = await env.DB.prepare('SELECT * FROM users ORDER BY active DESC, name').all();
+    return json({users: r.results.map(publicUser)});
+  }
+  if (req.method === 'POST') {
+    const b = await req.json().catch(() => ({}));
+    const name = String(b.name || '').trim();
+    if (!name) return fail(400, 'Enter the name.');
+    if (!validUsername(b.username)) return fail(400, 'Username: 3–40 letters or numbers (dot, dash and underscore are fine).');
+    if (!ROLES.includes(b.role)) return fail(400, 'Choose a role.');
+    if (b.role === 'Super admin' && user.role !== 'Super admin') return fail(403, 'Only a Super admin can create another Super admin.');
+    if (!validPassword(b.password)) return fail(400, 'Password must have at least 6 characters.');
+    const exists = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(b.username).first();
+    if (exists) return fail(409, 'This username is already taken.');
+    const salt = randomHex(16);
+    await env.DB.prepare('INSERT INTO users (username, name, role, pass_hash, salt) VALUES (?,?,?,?,?)')
+      .bind(b.username, name, b.role, await hashPassword(b.password, salt), salt).run();
+    return json({ok: true});
+  }
+  return fail(405, 'Not allowed.');
+}
+
+async function apiUserUpdate(env, req, user, id) {
+  if (!canManageUsers(user)) return fail(403, 'Only Admin or Super admin can manage users.');
+  const target = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
+  if (!target) return fail(404, 'User not found.');
+  if (target.role === 'Super admin' && user.role !== 'Super admin') return fail(403, 'Only a Super admin can change a Super admin.');
+  const b = await req.json().catch(() => ({}));
+  const sets = [], vals = [];
+  if (b.name !== undefined) { const n = String(b.name).trim(); if (!n) return fail(400, 'Enter the name.'); sets.push('name = ?'); vals.push(n); }
+  if (b.role !== undefined) {
+    if (!ROLES.includes(b.role)) return fail(400, 'Choose a role.');
+    if (b.role === 'Super admin' && user.role !== 'Super admin') return fail(403, 'Only a Super admin can make someone Super admin.');
+    if (target.id === user.id && b.role !== user.role) return fail(400, 'You cannot change your own role.');
+    sets.push('role = ?'); vals.push(b.role);
+  }
+  if (b.active !== undefined) {
+    if (target.id === user.id && !b.active) return fail(400, 'You cannot switch off your own user.');
+    sets.push('active = ?'); vals.push(b.active ? 1 : 0);
+  }
+  if (b.password) {
+    if (!validPassword(b.password)) return fail(400, 'Password must have at least 6 characters.');
+    const salt = randomHex(16);
+    sets.push('pass_hash = ?', 'salt = ?', 'failed = 0', 'locked_until = NULL'); vals.push(await hashPassword(b.password, salt), salt);
+  }
+  if (!sets.length) return json({ok: true});
+  const stmts = [env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).bind(...vals, id)];
+  if (b.active === false || b.password) stmts.push(env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(id));
+  if (target.role === 'Super admin' && (b.active === false || (b.role && b.role !== 'Super admin'))) {
+    const others = await env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'Super admin' AND active = 1 AND id != ?").bind(id).first('n');
+    if (!others) return fail(400, 'There must always be at least one active Super admin.');
+  }
+  await env.DB.batch(stmts);
+  return json({ok: true});
+}
+
+async function apiPassword(env, req, user) {
+  const b = await req.json().catch(() => ({}));
+  const h = await hashPassword(String(b.current || ''), user.salt);
+  if (!safeEqual(h, user.pass_hash)) return fail(400, 'Your current password is wrong.');
+  if (!validPassword(b.password)) return fail(400, 'New password must have at least 6 characters.');
+  const salt = randomHex(16);
+  const token = cookieOf(req, 'sid');
+  await env.DB.batch([
+    env.DB.prepare('UPDATE users SET pass_hash = ?, salt = ? WHERE id = ?').bind(await hashPassword(b.password, salt), salt, user.id),
+    env.DB.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').bind(user.id, token)
+  ]);
+  return json({ok: true});
+}
+
+// ---------- router ----------
+export default {
+  async fetch(req, env) {
+    const url = new URL(req.url);
+    const path = url.pathname;
+    if (!path.startsWith('/api/')) return env.ASSETS.fetch(req);
+    try {
+      await ensureSchema(env);
+      if (req.method !== 'GET') {
+        // basic protection against requests sent from other websites
+        const origin = req.headers.get('origin');
+        if (origin && new URL(origin).host !== url.host) return fail(403, 'Request from another website was blocked.');
+        if (!(req.headers.get('content-type') || '').includes('application/json')) return fail(415, 'Send JSON.');
+      }
+      if (path === '/api/me' && req.method === 'GET') return apiMe(env, req);
+      if (path === '/api/setup' && req.method === 'POST') return apiSetup(env, req);
+      if (path === '/api/login' && req.method === 'POST') return apiLogin(env, req);
+      if (path === '/api/logout' && req.method === 'POST') return apiLogout(env, req);
+
+      const user = await currentUser(env, req);
+      if (!user) return fail(401, 'Please sign in again.');
+      if (path === '/api/data' && req.method === 'GET') return apiData(env);
+      if (path === '/api/version' && req.method === 'GET') return apiVersion(env);
+      if (path === '/api/ops' && req.method === 'POST') return apiOps(env, req, user);
+      if (path === '/api/password' && req.method === 'POST') return apiPassword(env, req, user);
+      if (path === '/api/import' && req.method === 'POST') return apiImport(env, req, user);
+      if (path === '/api/users') return apiUsers(env, req, user);
+      const m = path.match(/^\/api\/users\/(\d+)$/);
+      if (m && req.method === 'PATCH') return apiUserUpdate(env, req, user, Number(m[1]));
+      return fail(404, 'Not found.');
+    } catch (e) {
+      console.error(e);
+      return fail(500, 'Something went wrong on the server. Please try again.');
+    }
+  }
+};

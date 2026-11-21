@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tatva CRM · Files</title>
+<style>
+:root{
+  --bg:#f6f5f2;--panel:#ffffff;--ink:#1f1e1b;--ink2:#5d5b55;--ink3:#8d8a82;--line:#e4e1da;--line2:#d3cfc6;
+  --accent:#8a5a2b;--accent-bg:#f6ece1;--sold:#2f6f5e;--sold-bg:#e3f1ec;--hold:#9a6412;--hold-bg:#fbf0dc;
+  --lapsed:#8a3b33;--lapsed-bg:#f8e6e3;--dev:#6b6a66;--dev-bg:#ecebe7;--none-bg:#f1f0ec;--diff:#6a4bb0;--diff-bg:#efeafb;
+  --radius:10px;--font:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font);font-size:14px;color:var(--ink);background:var(--bg);line-height:1.45}
+button,input,select{font:inherit;color:inherit}
+a{color:inherit}
+.app{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
+aside{background:var(--panel);border-right:1px solid var(--line);padding:18px 12px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{display:flex;align-items:center;gap:10px;padding:2px 8px 16px}
+.brand-mark{width:30px;height:30px;border-radius:8px;background:var(--accent);color:#fff;display:grid;place-items:center;font-weight:700}
+.brand b{display:block;font-size:14px}.brand span{font-size:12px;color:var(--ink3)}
+.navlabel{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);padding:14px 10px 6px}
+.nav a{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;text-decoration:none;color:var(--ink2);cursor:pointer}
+.nav a:hover{background:var(--bg)}
+.nav a.on{background:var(--accent-bg);color:var(--accent);font-weight:600}
+.nav .ct{margin-left:auto;font-size:12px;color:var(--ink3);font-variant-numeric:tabular-nums}
+.ico{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+main{padding:20px 28px 60px;min-width:0}
+.topbar{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.search{flex:1;max-width:480px;position:relative}
+.search input{width:100%;padding:9px 12px 9px 36px;border:1px solid var(--line2);border-radius:9px;background:var(--panel)}
+.search .ico{position:absolute;left:12px;top:11px;color:var(--ink3)}
+.results{position:absolute;top:42px;left:0;right:0;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.08);z-index:5;max-height:380px;overflow:auto}
+.results a{display:flex;gap:10px;padding:9px 12px;text-decoration:none;cursor:pointer;border-bottom:1px solid var(--line)}
+.results a:hover{background:var(--bg)}
+.results small{color:var(--ink3);margin-left:auto}
+.role{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-left:auto}
+.role select{padding:6px 10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel);font-weight:600}
+.proto{font-size:12px;color:var(--ink3);width:100%}
+.who{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink2);margin-left:auto}
+.who b{color:var(--ink)}.who .btn{padding:5px 10px;font-size:12.5px}
+#login[hidden]{display:none}
+#login{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);padding:16px;z-index:70}
+#login form{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px 26px 22px;width:min(380px,100%);display:grid;gap:12px;box-shadow:0 10px 40px rgba(0,0,0,.06)}
+#login h1{margin:0 0 2px;font-size:20px}#login p{margin:0 0 6px;color:var(--ink3);font-size:13px}
+#login label{display:grid;gap:5px;font-size:12px;color:var(--ink3)}
+#login input{font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--line2);border-radius:8px}
+#login .err{color:var(--lapsed);font-size:12.5px;min-height:16px}
+.banner{background:var(--accent-bg);border:1px solid var(--accent);color:var(--ink);border-radius:10px;padding:9px 12px;font-size:13px;display:flex;gap:10px;align-items:center;margin-bottom:14px}
+.banner .btn{margin-left:auto}
+.boot{display:grid;place-items:center;height:100vh;color:var(--ink3);font-size:14px}
+.crumbs{font-size:13px;color:var(--ink3);margin-bottom:6px}
+.crumbs a{cursor:pointer;text-decoration:none;color:var(--ink2)}.crumbs a:hover{text-decoration:underline}
+h1{font-size:22px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
+.sub{color:var(--ink2);margin:0 0 16px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);border-radius:999px;padding:4px 11px;font-size:13px;background:var(--panel);cursor:pointer;user-select:none}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}.chip.on .muted{color:#cfccc4}
+.chip.diff{border-color:#d5caef;color:var(--diff)}.chip.diff.on{background:var(--diff);color:#fff;border-color:var(--diff)}
+.badge{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.b-sold{background:var(--sold-bg);color:var(--sold)}.b-hold{background:var(--hold-bg);color:var(--hold)}
+.b-lapsed{background:var(--lapsed-bg);color:var(--lapsed)}.b-dev{background:var(--dev-bg);color:var(--dev)}.b-none{background:var(--none-bg);color:var(--ink3)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
+.card h2{font-size:15px;margin:0 0 12px;font-weight:650;display:flex;align-items:center;gap:8px}
+.card h2 .src{white-space:nowrap;margin-left:auto;font-size:11.5px;font-weight:500;color:var(--ink3)}
+.filters{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;display:grid;gap:10px}
+.filters label{font-size:12px;color:var(--ink3);display:flex;align-items:center;gap:6px}
+.filters input,.filters select{padding:5px 8px;border:1px solid var(--line2);border-radius:7px;background:var(--panel);font-size:13px}
+.flabel{font-size:11.5px;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;min-width:78px}
+.btn{padding:7px 14px;border-radius:8px;border:1px solid var(--line2);background:var(--panel);cursor:pointer;font-weight:550}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{padding:4px 10px;font-size:12.5px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 22px}
+.kv small{display:block;font-size:11.5px;color:var(--ink3)}.kv div{font-weight:550}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:600;color:var(--ink3);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.sr,th.sr{color:var(--ink3);width:46px;font-variant-numeric:tabular-nums}
+tr.click{cursor:pointer}tr.click:hover td{background:#faf9f6}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tfoot td{font-weight:650;border-bottom:none}
+.muted{color:var(--ink3)}
+.ed{display:inline-flex;align-items:center;gap:4px}
+.pen{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:5px;border:none;background:none;color:var(--ink3);cursor:pointer;opacity:.45;padding:0;flex:none}
+.pen svg{width:13px;height:13px}
+tr:hover .pen,.card h2 .pen,.psub .pen,.pen:focus{opacity:.85}
+td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!important;text-align:right}
+.psub{display:flex;align-items:center;gap:6px}
+.dlg .lk{font-size:11.5px;color:var(--lapsed)}
+.pen:hover{opacity:1;background:var(--accent-bg);color:var(--accent)}
+
+.dbg{position:fixed;inset:0;background:rgba(30,24,18,.38);z-index:60;display:grid;place-items:center;padding:16px}
+.dlg{background:var(--panel);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);width:min(420px,100%);max-height:calc(100vh - 32px);overflow:auto}
+.dlg.wide{width:min(680px,100%)}
+.dlg .dh{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:16px 18px 10px;border-bottom:1px solid var(--line)}
+.dlg .dh h3{margin:0;font-size:16px}.dlg .dh small{display:block;color:var(--ink3);font-size:12px;margin-top:3px}
+.dlg .dx{border:none;background:none;font-size:22px;line-height:1;cursor:pointer;color:var(--ink3)}
+.dlg .db{padding:14px 18px;display:grid;gap:12px}
+.dlg .df{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px 16px;border-top:1px solid var(--line)}
+.dlg label{font-size:12px;color:var(--ink3);display:grid;gap:5px}
+.dlg input,.dlg select,.dlg textarea{font:inherit;font-size:13.5px;padding:8px 10px;border:1px solid var(--line2);border-radius:8px;background:#fff;color:var(--ink)}
+.dlg input:focus,.dlg select:focus,.dlg textarea:focus{outline:2px solid var(--accent-bg);border-color:var(--accent)}
+.dlg .was{font-size:12px;color:var(--ink3)}
+.dlg .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.dlg .sec{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);font-weight:650;margin-top:4px}
+.dlg .chips{display:flex;flex-wrap:wrap;gap:6px}
+.dlg .chip{border:1px solid var(--line2);background:#fff;border-radius:999px;padding:6px 12px;cursor:pointer;font-size:13px}
+.dlg .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.dlg .warn{background:var(--hold-bg);color:var(--hold);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.dlg .warn a{color:inherit;font-weight:650;cursor:pointer;text-decoration:underline}
+@media(max-width:560px){.dlg .g2{grid-template-columns:1fr}}
+.ed.edited{box-shadow:inset 0 -2px 0 #e9c46a}
+.ed input,.ed select{font-size:13px;padding:3px 6px;border:1.5px solid var(--accent);border-radius:6px;min-width:110px;max-width:100%;background:#fff}
+.lock{font-size:11px;margin-left:4px;color:var(--lapsed)}
+.folders{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px}
+.folder{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px;cursor:pointer;display:flex;gap:12px;align-items:flex-start;text-decoration:none}
+.folder:hover{border-color:var(--accent)}
+.folder .ico{width:22px;height:22px;color:var(--accent);margin-top:1px}
+.folder b{display:block;font-size:13.5px}.folder span{font-size:12px;color:var(--ink3)}
+.drop{border:1.5px dashed var(--line2);border-radius:var(--radius);padding:16px;text-align:center;color:var(--ink3);background:#fbfaf8}
+.drop.over{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.drop button{margin-top:8px;padding:6px 14px;border-radius:8px;border:1px solid var(--line2);background:var(--panel);cursor:pointer}
+.files{margin-top:12px;display:grid;gap:8px}
+.file{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.file .ext{font-size:10.5px;font-weight:700;width:38px;text-align:center;padding:4px 0;border-radius:6px;background:var(--accent-bg);color:var(--accent);text-transform:uppercase}
+.file a{margin-left:auto;font-size:12.5px;cursor:pointer;color:var(--accent)}
+.err{color:var(--lapsed);font-size:12.5px;margin-top:8px}
+.plotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:5px}
+.pt{border-radius:6px;padding:6px 0;text-align:center;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;font-variant-numeric:tabular-nums}
+.pt:hover{outline:2px solid var(--ink)}
+.pt.s-sold{background:var(--sold);color:#fff}.pt.s-hold{background:#e3a23b;color:#3b2604}
+.pt.s-unsold{background:var(--panel);border-color:var(--line2);color:var(--ink2)}
+.pt.s-dev{background:repeating-linear-gradient(45deg,#e9e7e2,#e9e7e2 4px,#f4f3ef 4px,#f4f3ef 8px);color:var(--ink3)}
+.pt.s-pre{background:#9fb8ae;color:#fff}.pt.s-none{background:var(--none-bg);color:var(--ink3)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--ink2);margin:0 0 10px}
+.ltag{cursor:pointer;padding:3px 8px;border-radius:999px;border:1px solid transparent;user-select:none}.ltag:hover{border-color:var(--line2)}.ltag.on{border-color:var(--ink);font-weight:600}.ltag.dim{opacity:.35}
+.pt.faded{opacity:.15}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat small{color:var(--ink3);font-size:12px}.stat div{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--hold-bg);border-radius:8px;padding:8px 10px;margin:0 0 12px;font-size:13px}.acts span{flex:1;min-width:160px;color:var(--hold)}
+.note{font-size:12.5px;color:var(--ink2);background:var(--accent-bg);border-radius:8px;padding:9px 12px;margin-bottom:14px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px;align-items:start}
+.bars{display:grid;gap:7px}.bar{display:grid;grid-template-columns:170px 1fr 110px;gap:10px;align-items:center;font-size:13px;cursor:pointer}
+.bar .track{height:10px;background:var(--bg);border-radius:5px;overflow:hidden}.bar .fill{height:100%;background:var(--accent);border-radius:5px}
+.bar.on{font-weight:650}.bar.on .fill{background:var(--ink)}
+.addform{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;align-items:end}
+.addform label{font-size:12px;color:var(--ink3);display:grid;gap:4px}
+.addform input,.addform select{padding:6px 8px;border:1px solid var(--line2);border-radius:7px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:9px;font-size:13px;z-index:30;box-shadow:0 6px 20px rgba(0,0,0,.2)}
+.preview{position:fixed;inset:0;background:rgba(20,18,15,.55);display:grid;place-items:center;z-index:20}
+.preview .box{background:var(--panel);border-radius:12px;width:min(900px,92vw);height:min(82vh,900px);display:flex;flex-direction:column;overflow:hidden}
+.preview .bar2{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);gap:10px}
+.preview .bar2 button{margin-left:auto;border:none;background:none;font-size:20px;cursor:pointer}
+.preview iframe,.preview img{flex:1;width:100%;border:0;object-fit:contain;background:#f0efeb;min-height:0}
+.th{display:inline-flex;align-items:center;gap:4px}
+.fbtn{border:none;background:none;padding:2px 3px;border-radius:4px;cursor:pointer;color:var(--ink3);display:inline-grid;place-items:center;line-height:0}
+.fbtn:hover{background:var(--bg);color:var(--ink)}.fbtn.on{background:var(--accent);color:#fff}
+.psub{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);margin:14px 0 8px;padding-top:10px;border-top:1px solid var(--line)}.psub:first-of-type{border-top:none;padding-top:0;margin-top:0}
+.tmeta{font-size:13px;color:var(--ink3);margin:0 0 6px}.tmeta a{color:var(--accent);cursor:pointer}
+.tablecard{padding:4px 6px}.tscroll{overflow-x:auto}
+.pop{position:absolute;z-index:40;width:290px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:8px 0;font-size:13px}
+.pop .ptitle{padding:4px 12px 6px;font-weight:650}
+.pop .pitem{display:block;width:100%;text-align:left;border:none;background:none;padding:7px 12px;cursor:pointer}.pop .pitem:hover{background:var(--bg)}
+.pop .psec{padding:8px 12px 6px;border-top:1px solid var(--line);margin-top:4px;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3)}
+.pop input[type=search],.pop input[type=number]{padding:6px 8px;border:1px solid var(--line2);border-radius:7px;font-size:13px}
+.pop a{color:var(--accent);cursor:pointer}
+.plist{max-height:240px;overflow:auto;padding:2px 12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.plist label{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer}.plist label span:first-of-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
+.pfoot{justify-content:flex-end;padding:8px 12px 2px;gap:8px}
+@media (max-width:900px){.app{grid-template-columns:1fr}aside{position:static;height:auto}.split{grid-template-columns:1fr}main{padding:14px}}
+</style>
+</head>
+<body>
+<div id="bootMsg" class="boot">Loading…</div>
+<div id="login" hidden></div>
+<div class="app" id="app" hidden>
+  <aside>
+    <div class="brand"><div class="brand-mark">T</div><div><b>Tatva CRM</b><span>Files</span></div></div>
+    <nav class="nav" id="nav"></nav>
+  </aside>
+  <main>
+    <div class="topbar">
+      <div class="search">
+        <svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="q" placeholder="Search client name, phone or plot number" autocomplete="off">
+        <div class="results" id="results" hidden></div>
+      </div>
+      <div class="who" id="who"></div>
+      <div class="proto">Click the pencil to edit · use the filter button in column headers to sort and filter · every change is saved for the whole team</div>
+    </div>
+    <div id="banner"></div>
+    <div id="view"></div>
+  </main>
+</div>
+<div id="modal"></div><div id="dlg"></div><div id="toastBox"></div><div id="popBox"></div>
+<script>
+function startApp(D, ME, LOG) {
+{ const bm = document.getElementById('bootMsg'); if (bm) bm.remove(); document.getElementById('app').hidden = false; }
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr = v => v == null || v === '' ? '—' : '₹' + Number(v).toLocaleString('en-IN', {maximumFractionDigits: 0});
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const isISO = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+const fd = v => { if (!v) return '—'; const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v); return m ? `<span style="white-space:nowrap">${+m[3]} ${MONTHS[+m[2]-1]} ${m[1]}</span>` : esc(v); };
+const val = v => (v == null || v === '') ? '<span class="muted">—</span>' : esc(v);
+const ICON = {
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  users:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.2.2 3.6 1.8 4 4.3"/>',
+  grid:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  land:'<path d="M3 18l5-8 4 5 3-4 6 7z"/><circle cx="16" cy="6" r="2"/>',
+  hand:'<path d="M8 12l3 3 5-6"/><circle cx="12" cy="12" r="8.5"/>',
+  tool:'<path d="M14.5 6.5a4 4 0 0 0-5.3 5.3L4 17l3 3 5.2-5.2a4 4 0 0 0 5.3-5.3l-2.6 2.6-2.4-.6-.6-2.4z"/>',
+  check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  coins:'<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/>',
+  award:'<circle cx="12" cy="9" r="5.5"/><path d="M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5"/>',
+  pin:'<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"/><circle cx="12" cy="10" r="2.3"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'
+};
+const ico = n => `<svg class="ico" viewBox="0 0 24 24">${ICON[n]}</svg>`;
+function toast(msg) { $('#toastBox').innerHTML = `<div class="toast">${esc(msg)}</div>`; clearTimeout(toast.t); toast.t = setTimeout(() => $('#toastBox').innerHTML = '', 2600); }
+
+// ---------- changes come from (and go to) the server ----------
+const mapEdit = e => ({eid: e.id, coll: e.coll, id: e.rec_id, field: e.field, old: e.old, new: e.new, label: e.label, undone: e.undone, undoOf: e.undo_of, role: e.role, user: e.user_name, at: e.at});
+const mapStep = s => ({...s.data, type: s.type, at: s.at, role: s.role, user: s.user_name});
+let store = {edits: LOG.edits.map(mapEdit), flows: LOG.steps.map(mapStep), added: {visits: [], expenses: []}, role: ME.role};
+let myVersion = LOG.version;
+const saveStore = () => {};
+async function sendOps(ops) {
+  const r = await api('/api/ops', {body: {ops}});
+  myVersion = Math.max(myVersion, r.version);
+  Object.entries(r.sr || {}).forEach(([k, sr]) => { const [coll, id] = k.split('|'); const o = IDX[coll] && IDX[coll][id]; if (o) o.sr = sr; });
+  (r.edits || []).forEach(e => store.edits.push(mapEdit(e)));
+  return r;
+}
+// Records a step (hold, booking, ...) that changes several records at once: we change them here, then send every changed record.
+const TRACK = ['visits', 'clients', 'bookings', 'payments', 'expenses'];
+function snap() {
+  const s = {}; TRACK.forEach(k => { s[k] = {}; D[k].forEach(o => s[k][o.id] = JSON.stringify(o)); });
+  s.plots = {}; Object.values(D.plots).forEach(p => s.plots[p.id] = JSON.stringify(p)); s.plotOwners = {...D.plotOwners}; return s;
+}
+function diffOps(s) {
+  const ops = [];
+  TRACK.forEach(k => D[k].forEach(o => { const j = JSON.stringify(o); if (s[k][o.id] !== j) ops.push({op: 'put', coll: k, id: o.id, data: o, newSr: !(o.id in s[k])}); }));
+  Object.values(D.plots).forEach(p => { if (s.plots[p.id] !== JSON.stringify(p)) ops.push({op: 'put', coll: 'plots', id: p.id, data: p}); });
+  Object.entries(D.plotOwners).forEach(([k, v]) => { if (s.plotOwners[k] !== v) ops.push({op: 'put', coll: 'plotOwners', id: k, data: v}); });
+  return ops;
+}
+let saving = false;
+async function commit(s, steps, okMsg, go) {
+  const ops = diffOps(s).concat(steps.map(f => ({op: 'step', type: f.type, data: f})));
+  reindex(); if (go && location.hash !== go) location.hash = go; else render();
+  saving = true;
+  try { await sendOps(ops); steps.forEach(f => store.flows.push({...f, user: ME.name, role: ME.role, at: new Date().toISOString()})); toast(okMsg); render(); }
+  catch (e) { toast(e.message + ' Reloading…'); setTimeout(() => location.reload(), 2500); }
+  finally { saving = false; }
+}
+async function checkVersion() {
+  if (saving || document.hidden) return;
+  try { const r = await api('/api/version'); if (r.version > myVersion && !$('#banner').innerHTML) $('#banner').innerHTML = `<div class="banner">Someone else has made changes. Refresh to see the latest data.<button class="btn primary small" onclick="location.reload()">Refresh</button></div>`; } catch (e) {}
+}
+function renderWho() {
+  $('#who').innerHTML = `<span><b>${esc(ME.name)}</b> · ${esc(ME.role)}</span><button class="btn" data-mypass>Change password</button><button class="btn" data-logout>Sign out</button>`;
+}
+
+// ---------- normalise + index ----------
+const AGENT_FIX = {'Sahil': 'Sahil Bhai', 'Vaibhav Bhai': 'Vaibhav', "Rashi Ma'Am": 'Rashi'};
+const agentsOf = s => (s || '').split(/,|&|\//).map(x => x.trim()).filter(Boolean).map(x => AGENT_FIX[x] || x);
+D.visits.sort((a, b) => (b.added ? 1 : 0) - (a.added ? 1 : 0) || (a.added ? (b.sr || 0) - (a.sr || 0) : 0));
+D.contractors.forEach(c => { c.expenses = D.expenses.filter(e => (!e.added && (c.expenseRows || []).includes(e.row)) || e.contractor === c.name); });
+const IDX = {};
+const indexColl = (name, arr) => { const m = IDX[name] || (IDX[name] = {}); Object.keys(m).forEach(k => delete m[k]); arr.forEach(o => m[o.id] = o); };
+function reindex() {
+  indexColl('visits', D.visits); indexColl('bookings', D.bookings); indexColl('payments', D.payments); indexColl('clients', D.clients);
+  indexColl('plots', Object.values(D.plots)); indexColl('expenses', D.expenses); indexColl('landowners', D.landowners);
+  indexColl('advances', D.advances); indexColl('incentives', D.incentives); indexColl('registry', Object.values(D.registry));
+  indexColl('dastavej', Object.values(D.dastavej)); indexColl('ledger', D.contractors.flatMap(c => c.ledger));
+}
+reindex();
+const maxSr = arr => Math.max(0, ...arr.map(o => o.sr || 0));
+
+// ---------- hold → booking → payment steps (saved as a list of steps, replayed on load) ----------
+const newPay = (f, text, amount, mode, plots, cid) => ({id: f.pid, sr: f.psr, row: 0, added: true, month: null, date: f.date, text, amount, mode, note: f.note || null, plots, status: 'Received', clients: [cid]});
+function applyFlow(f) {
+  const P = D.plots;
+  if (f.type === 'hold') {
+    let c = D.clients.find(x => x.id === f.cid);
+    if (!c) { c = {id: f.cid, sr: f.csr, name: f.name, phone: f.phone, plots: [], bookings: [], links: [], docStatus: null, added: true}; D.clients.push(c); }
+    const b = {id: f.bid, sr: f.bsr, row: 0, added: true, cid: c.id, client: c.name, phone: c.phone, by: f.by, visitDate: f.visitDate || null, holdDate: f.date, holdAmount: f.amount || null, holdMode: f.mode, plot: f.plot,
+      outcome: 'Plot On Hold', finalAmount: null, refunded: null, refundDate: null, dpAmount: null, dpDate: null, dpMode: null, loan: null, loanAmount: null, emi: null, mou: null, dastavejStatus: null, payment: null, maintenanceCheque: null, remarks: f.note || null};
+    D.bookings.push(b); c.bookings.push(b.id); if (!c.plots.includes(f.plot)) c.plots.push(f.plot);
+    c.links.push({name: c.name, source: 'Added in CRM', plot: f.plot, how: f.vid ? 'hold taken from a site visit' : 'hold taken from the client folder'});
+    if (P[f.plot]) P[f.plot].status = 'HOLD';
+    if (f.vid) { const v = D.visits.find(x => x.id === f.vid); if (v) v.client = c.id; }
+    if (f.amount) D.payments.push(newPay(f, 'Hold amount · plot ' + f.plot, f.amount, f.mode, [f.plot], c.id));
+  } else if (f.type === 'book') {
+    const b = D.bookings.find(x => x.id === f.bid); if (!b) return;
+    Object.assign(b, {outcome: 'Converted', finalAmount: f.final, dpAmount: f.amount || null, dpDate: f.date, dpMode: f.mode, loan: f.loan, loanAmount: f.loanAmount || null, emi: f.emi || null});
+    if (P[b.plot]) P[b.plot].status = 'SOLD OUT';
+    D.plotOwners[b.plot] = f.cid;
+    const c = D.clients.find(x => x.id === f.cid); if (c && !c.docStatus) c.docStatus = 'MOU not done';
+    const v = D.visits.find(x => x.id === f.vid); if (v) v.status = 'Converted';
+    if (f.amount) D.payments.push(newPay(f, 'Booking amount · plot ' + b.plot, f.amount, f.mode, [b.plot], f.cid));
+  } else if (f.type === 'pay') {
+    D.payments.push(newPay(f, f.text || 'Payment' + (f.plot ? ' · plot ' + f.plot : ''), f.amount, f.mode, f.plot ? [f.plot] : [], f.cid));
+  } else if (f.type === 'lapse') {
+    const b = D.bookings.find(x => x.id === f.bid); if (!b) return;
+    Object.assign(b, {outcome: 'Lapsed', refunded: f.refund ? 'Refunded' : 'Not Refunded', refundDate: f.refund ? f.date : null});
+    if (P[b.plot] && /HOLD/i.test(P[b.plot].status || '')) P[b.plot].status = 'UNSOLD';
+  }
+}
+reindex();
+
+function getF(coll, o, f) { return o[f]; }
+function setF(coll, o, f, v) {
+  o[f] = v;
+  if (coll === 'visits' && /^fu\d(Date|Note)$/.test(f)) { const i = +f[2] - 1; o.followups = o.followups || [1, 2, 3, 4].map(s => ({step: s, who: s <= 2 ? 'Agent' : s === 3 ? 'Sahil Bhai' : 'Pratik Sir', date: null, note: null})); o.followups[i][f.endsWith('Date') ? 'date' : 'note'] = v; }
+  if (coll === 'expenses') { D.contractors.forEach(c => c.expenses.forEach((x, k) => { if (x.row === o.row && !o.added) c.expenses[k] = o; })); }
+}
+const DOC_OPTS = ['MOU not done', 'MOU done', 'Dastavej pending at office', 'Dastavej done', 'Dastavej done & sent', 'Without dastavej'];
+const editedSet = new Set();
+store.edits.forEach(e => { if (!e.undone && !e.undoOf) editedSet.add(e.coll + '|' + e.id + '|' + e.field); });
+
+// ---------- lookups ----------
+const bookingById = IDX.bookings, clientById = IDX.clients;
+const plotOwner = D.plotOwners;
+const landByPlot = () => Object.fromEntries(D.landowners.filter(l => l.plot).map(l => [l.plot, l]));
+function vStatus(v) { const s = (v.status || '').toUpperCase();
+  if (s.includes('NOT')) return ['Not interested', 'b-lapsed']; if (s.includes('FOLLOW')) return ['Follow up', 'b-hold'];
+  if (s === 'DONE' || s.includes('CONVERT')) return ['Converted', 'b-sold']; return ['No status', 'b-none']; }
+const isConvertedVisit = v => vStatus(v)[0] === 'Converted';
+const isConvertedBooking = b => /convert/i.test(b.outcome || '');
+function clientStatus(c) {
+  const outs = c.bookings.map(id => (bookingById[id].outcome || '').toLowerCase());
+  if (outs.some(o => o.startsWith('convert'))) return ['Booked', 'b-sold'];
+  if (outs.some(o => o.includes('hold'))) return ['On hold', 'b-hold'];
+  if (outs.length) return ['Lapsed', 'b-lapsed'];
+  return ['Sold · registers only', 'b-none'];
+}
+const clientPayments = id => D.payments.filter(p => p.clients.includes(id));
+const received = p => p.status !== 'Cheque returned';
+const paidOf = list => list.filter(received).reduce((a, p) => a + (p.amount || 0), 0);
+const clientPlots = c => { const own = c.plots.filter(p => D.plots[p] && plotOwner[p] === c.id);
+  const held = c.bookings.map(id => bookingById[id]).filter(b => b && /hold/i.test(b.outcome || '') && D.plots[b.plot] && !own.includes(b.plot)).map(b => b.plot);
+  const r = [...new Set([...own, ...held])]; return r.length ? r : c.plots.filter(p => D.plots[p]); };
+const clientSize = c => { const a = clientPlots(c).map(p => D.plots[p].area).filter(x => x != null); return a.length ? Math.round(a.reduce((s, x) => s + x, 0) * 100) / 100 : null; };
+const clientFinal = c => { const conv = c.bookings.map(id => bookingById[id]).filter(b => /convert/i.test(b.outcome || '') && b.finalAmount);
+  if (conv.length) return conv.reduce((s, b) => s + b.finalAmount, 0);
+  const deeds = clientPlots(c).map(p => D.dastavej[p]).filter(d => d && d.finalAmount); return deeds.length ? deeds.reduce((s, d) => s + d.finalAmount, 0) : null; };
+const lastHoldBooking = c => c.bookings.map(id => bookingById[id]).filter(b => b.holdDate || b.holdAmount).sort((a, b) => String(a.holdDate || '').localeCompare(String(b.holdDate || ''))).pop() || null;
+const amtCell = (p, html) => received(p) ? html : `<span style="text-decoration:line-through;color:var(--ink3)">${html}</span>`;
+const payBadge = p => received(p) ? '<span class="badge b-sold">Received</span>' : '<span class="badge b-lapsed">Cheque returned</span>';
+function plotClass(p) {
+  const s = (p.status || '').toUpperCase();
+  if (s.includes('UNSOLD')) return ['s-unsold', 'Unsold', 'b-none'];
+  if (s.includes('SOLD')) return ['s-sold', 'Sold', 'b-sold'];
+  if (s.includes('HOLD')) return ['s-hold', 'Hold', 'b-hold'];
+  if (s.includes('DEVELOP')) return ['s-dev', 'Development area', 'b-dev'];
+  if (p.trpl === 'Before TRPL') return ['s-pre', 'Sold before TRPL', 'b-dev'];
+  return ['s-none', 'Not marked', 'b-none'];
+}
+const fuStage = v => { for (let i = 4; i >= 1; i--) if (v['fu' + i + 'Date'] || v['fu' + i + 'Note']) return i; return 0; };
+const AGENTS = [...new Set([...D.visits, ...D.bookings].flatMap(x => agentsOf(x.by)))].filter(a => a !== 'Company').sort();
+const OPTS = {
+  visitStatus: ['Follow up', 'Converted', 'Not interested'],
+  agents: [...AGENTS, 'Company'],
+  outcome: ['Plot On Hold', 'Converted', 'Lapsed'],
+  plotStatus: ['UNSOLD', 'HOLD', 'SOLD OUT', 'DEVELOPMENT AREA'],
+  forWhat: ['Plots', 'Villas', 'Plots, Villas'],
+  method: ['Cash', 'Online', 'Cheque', 'Plot'],
+  payMode: ['Cash', 'Online', 'Cheque', 'UPI', 'NEFT', 'RTGS'],
+  yesNo: ['Yes', 'No'],
+  docStatus: DOC_OPTS,
+  payStatus: ['Received', 'Cheque returned'],
+  incType: ['Company', 'Personal']
+};
+
+// ---------- inline editing ----------
+const ROLE = () => ME.role;
+function lockReason(coll, o, f) {
+  if (ROLE() !== 'Agent') return null;
+  if (coll === 'visits' && f === 'status' && isConvertedVisit(o)) return 'This visit is Converted. Only Admin or Super admin can change it.';
+  if (coll === 'bookings' && f === 'outcome' && isConvertedBooking(o)) return 'This booking is Converted. Only Admin or Super admin can change it.';
+  return null;
+}
+function ed(coll, o, f, kind = 'text', opt = '', shown) {
+  if (!o) return '<span class="muted">—</span>';
+  const v = getF(coll, o, f);
+  const disp = shown != null ? shown : kind === 'date' ? fd(v) : kind === 'money' ? inr(v) : val(v);
+  const lock = lockReason(coll, o, f);
+  const edited = editedSet.has(coll + '|' + o.id + '|' + f);
+  return `<span class="ed${lock ? ' locked' : ''}${edited ? ' edited' : ''}" data-e="${esc(coll)}|${esc(o.id)}|${esc(f)}|${kind}|${opt}"${lock ? ` data-lock="${esc(lock)}"` : ''}>${disp}${lock ? '<span class="lock">locked</span>' : ''}</span>`;
+}
+const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const PEN_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+const FIELD_LABELS = {date: 'Date', name: 'Name', phone: 'Phone', by: 'Agent', status: 'Status', extra: 'Note', remark: 'Remark', docStatus: 'Document status',
+  holdDate: 'Hold date', holdAmount: 'Hold amount', holdMode: 'Hold paid by', refunded: 'Refund', finalAmount: 'Final amount', dpAmount: 'Down payment', dpDate: 'Down payment date',
+  loan: 'Loan', loanAmount: 'Loan amount', emi: 'EMI', payment: 'Payment status', mou: 'MOU', dastavejStatus: 'Dastavej status', maintenanceCheque: 'Maintenance cheque', outcome: 'Booking status',
+  client: 'Client name', onlineCheque: 'Online / cheque', cash: 'Cash', fy: 'Financial year', kind: 'Type', vakilAmount: 'Vakil fee', vakilDate: 'Vakil date', maintenanceAmount: 'Maintenance deposit', maintenanceDate: 'Deposit date',
+  owner: 'Owner', plot: 'Plot', sqYard: 'Sq yard', saleValue: 'Total sale value', anjaneePaid: 'Anjanee paid', area: 'Area (sq yd)', note: 'Note', particulars: 'Particulars', for: 'For', type: 'Type', amount: 'Amount', method: 'Paid by', remarks: 'Remarks',
+  text: 'Entry', mode: 'Mode', particular: 'Particular', advance: 'Advance', bookingDate: 'Booking date', final: 'Final incentive', pending: 'Pending', sellAmount: 'Sell amount', size: 'Size', slab: 'Slab'};
+const fieldLabel = f => { const m = /^fu(\d)(Date|Note)$/.exec(f); if (m) return 'Follow-up ' + m[1] + ' ' + m[2].toLowerCase(); return FIELD_LABELS[f] || f.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()); };
+function addPencils(root) {
+  const mk = (scope, title) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pen'; b.title = title; b.setAttribute('aria-label', title); b.innerHTML = PEN; b._scope = scope; b._title = title; return b; };
+  // tables: one pencil per row
+  root.querySelectorAll('table').forEach(tb => {
+    const rows = [...tb.querySelectorAll('tbody tr')].filter(r => r.querySelector('.ed[data-e]')); if (!rows.length) return;
+    const heads = [...tb.querySelectorAll('thead th')].map(th => th.textContent.replace(/\s+/g, ' ').trim());
+    tb.querySelectorAll('thead tr, tfoot tr').forEach(r => { const c = document.createElement(r.parentNode.tagName === 'THEAD' ? 'th' : 'td'); c.className = 'pcell'; r.appendChild(c); });
+    tb.querySelectorAll('tbody tr').forEach(r => {
+      const c = document.createElement('td'); c.className = 'pcell'; r.appendChild(c);
+      if (!r.querySelector('.ed[data-e]')) return;
+      [...r.children].forEach((td, i) => td.querySelectorAll && td.querySelectorAll('.ed[data-e]').forEach(s => { if (heads[i]) s._label = heads[i].charAt(0) + heads[i].slice(1).toLowerCase(); }));
+      const first = r.querySelector('td:not(.sr) b, td:not(.sr)'); c.appendChild(mk(r, 'Edit row'));
+    });
+  });
+  // detail cards: one pencil per group of fields
+  root.querySelectorAll('.grid2').forEach(g => {
+    if (!g.querySelector('.ed[data-e]') || g.closest('table')) return;
+    g.querySelectorAll('.kv').forEach(k => { const lab = k.querySelector('small'); k.querySelectorAll('.ed[data-e]').forEach(s => s._label = lab ? lab.textContent : null); });
+    const prev = g.previousElementSibling; const card = g.closest('.card');
+    const head = prev && prev.classList.contains('psub') ? prev : card && card.querySelector('h2');
+    if (!head) return;
+    const title = 'Edit ' + (head.childNodes[0] ? head.childNodes[0].textContent.trim() : '').toLowerCase();
+    const b = mk(g, title || 'Edit'); const src = head.querySelector('.src');
+    if (src) head.insertBefore(b, src); else head.appendChild(b);
+  });
+}
+const closeDlg = () => { $('#dlg').innerHTML = ''; dlgSave = null; };
+let dlgSave = null;
+const openDlg = (title, subtitle, body, saveLabel, onSave, wide) => {
+  $('#dlg').innerHTML = `<div class="dbg" data-dlgbg><div class="dlg${wide ? ' wide' : ''}" role="dialog" aria-modal="true"><div class="dh"><div><h3>${title}</h3>${subtitle ? `<small>${subtitle}</small>` : ''}</div><button class="dx" data-dlgclose aria-label="Close">×</button></div>
+  <div class="db">${body}<div class="err" id="dlg_err"></div></div><div class="df"><button class="btn" data-dlgclose>Cancel</button><button class="btn primary" data-dlgok>${saveLabel}</button></div></div></div>`;
+  dlgSave = onSave; const f = $('#dlg').querySelector('input,select,textarea'); if (f) { f.focus(); if (f.select && f.type !== 'date') try { f.select(); } catch (x) {} }
+};
+document.addEventListener('click', e => {
+  const t = e.target;
+  if ($('#dlg').firstChild) {
+    if (t.closest('[data-dlgclose]') || t.matches('[data-dlgbg]')) { e.stopPropagation(); closeDlg(); return; }
+    if (t.closest('[data-dlgok]')) { e.stopPropagation(); if (dlgSave) dlgSave(); return; }
+    const chip = t.closest('[data-chip]'); if (chip) { e.stopPropagation(); chip.parentNode.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip)); if (chip.parentNode.dataset.group === 'deal') dealFields(); return; }
+    const dg = t.closest('.dlg [data-go]'); if (dg) { e.stopPropagation(); closeDlg(); location.hash = dg.dataset.go; return; }
+    if (t.closest('.dlg')) return;
+  }
+  const sp = t.closest('.pen'); if (!sp) return;
+  e.stopPropagation(); e.preventDefault();
+  const scope = sp._scope; if (!scope) return;
+  const seen = new Set(), items = [];
+  scope.querySelectorAll('.ed[data-e]').forEach(s => { if (seen.has(s.dataset.e)) return; seen.add(s.dataset.e); items.push(s); });
+  const fields = items.map((s, i) => {
+    const [coll, id, f, kind, opt] = s.dataset.e.split('|'); const o = IDX[coll][id]; const cur = getF(coll, o, f);
+    const label = s._label || fieldLabel(f); const dis = s.dataset.lock ? ' disabled' : ''; const nm = 'dlg_f' + i;
+    let input;
+    if (kind === 'select') {
+      const opts = [...OPTS[opt]]; if (cur && !opts.includes(cur) && !(opt === 'visitStatus')) opts.unshift(cur);
+      const curLabel = opt === 'visitStatus' ? vStatus(o)[0] : cur;
+      input = `<select id="${nm}"${dis}><option value="">—</option>${opts.map(x => `<option ${x === curLabel ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+    } else if (kind === 'date' && (!cur || isISO(cur))) input = `<input id="${nm}" type="date" value="${esc(cur || '')}"${dis}>`;
+    else if (kind === 'money' || kind === 'number') input = `<input id="${nm}" type="number" step="any" value="${cur ?? ''}"${dis}>`;
+    else if (String(cur ?? '').length > 60) input = `<textarea id="${nm}" rows="3"${dis}>${esc(cur ?? '')}</textarea>`;
+    else input = `<input id="${nm}" type="text" value="${esc(cur ?? '')}"${dis}>`;
+    return {coll, id, f, kind, o, nm, html: `<label>${esc(label)}${input}${dis ? `<span class="lk">${esc(s.dataset.lock)}</span>` : ''}</label>`, lock: !!dis, initial: null};
+  });
+  if (!fields.length) return;
+  const recs = [...new Set(fields.map(x => describe(x.coll, x.o)))];
+  openDlg(esc(sp._title || 'Edit'), esc(recs.slice(0, 2).join(' · ')), `<div class="g2">${fields.map(x => x.html).join('')}</div>`, 'Save', () => {
+    const changes = [];
+    fields.forEach(x => {
+      if (x.lock) return;
+      let nv = $('#' + x.nm).value.trim();
+      if (x.kind === 'money' || x.kind === 'number') nv = nv === '' ? null : Number(nv); else nv = nv === '' ? null : nv;
+      const ov = getF(x.coll, x.o, x.f);
+      if (x.coll === 'visits' && x.f === 'status' && nv === vStatus(x.o)[0]) return;
+      if (String(ov ?? '') === String(nv ?? '')) return;
+      changes.push({x, nv});
+    });
+    if (!changes.length) { closeDlg(); return; }
+    const ops = [], copies = {};
+    changes.forEach(({x, nv}) => { ops.push({op: 'patch', coll: x.coll, id: x.id, field: x.f, value: nv, label: describe(x.coll, x.o)});
+      if (x.coll === 'visits' && /^fu\d/.test(x.f)) { const k = x.id; copies[k] = copies[k] || JSON.parse(JSON.stringify(x.o)); setF('visits', copies[k], x.f, nv); } });
+    Object.entries(copies).forEach(([id, copy]) => ops.push({op: 'patch', coll: 'visits', id, field: 'followups', value: copy.followups, silent: true}));
+    const btn = $('[data-dlgok]'); btn.disabled = true; btn.textContent = 'Saving…';
+    sendOps(ops).then(() => {
+      changes.forEach(({x, nv}) => { setF(x.coll, x.o, x.f, nv); editedSet.add(x.coll + '|' + x.id + '|' + x.f); });
+      closeDlg(); render(); toast(changes.length === 1 ? 'Saved 1 change' : 'Saved ' + changes.length + ' changes');
+    }).catch(e => { btn.disabled = false; btn.textContent = 'Save'; $('#dlg_err').textContent = e.message; });
+  }, fields.length > 3);
+}, true);
+document.addEventListener('keydown', e => {
+  if (!$('#dlg').firstChild) return;
+  if (e.key === 'Escape') { e.stopPropagation(); closeDlg(); }
+  if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.closest && e.target.closest('.dlg')) { e.preventDefault(); if (dlgSave) dlgSave(); }
+}, true);
+document.addEventListener('input', e => { if (e.target.id === 'nv_phone') visitDupHint(); });
+function describe(coll, o) {
+  return {visits: () => 'Visit · ' + (o.name || ''), bookings: () => 'Booking · ' + (o.client || '') + ' · plot ' + (o.plot || ''), payments: () => 'Payment · ' + (o.text || '').slice(0, 40),
+    clients: () => 'Client · ' + o.name, plots: () => 'Plot ' + o.no, expenses: () => 'Expense · ' + (o.particulars || ''), landowners: () => 'Sold plot · ' + (o.owner || ''),
+    advances: () => 'Advance · ' + (o.remarks || ''), incentives: () => 'Incentive · ' + (o.client || ''), registry: () => 'Registry · plot ' + o.plot,
+    dastavej: () => 'Dastavej · plot ' + o.plot, ledger: () => 'Contractor ledger · ' + (o.particular || '')}[coll]();
+}
+
+// ---------- uploads (this tab only) ----------
+const uploads = {};
+const OK = {pdf:1,jpg:1,jpeg:1,png:1,webp:1,xls:1,xlsx:1,csv:1,doc:1,docx:1};
+function dropzone(key, title) { return '';
+  const list = uploads[key] || [];
+  return `<div class="card"><h2>${ico('folder')} ${esc(title || 'Documents')} <span class="src">${list.length} file${list.length === 1 ? '' : 's'}</span></h2>
+    <div class="drop" data-drop="${esc(key)}">Drop PDFs, photos, Excel or Word files here<br><button type="button" data-pick="${esc(key)}">Choose files</button>
+    <input type="file" multiple hidden data-input="${esc(key)}" accept=".pdf,.jpg,.jpeg,.png,.webp,.xls,.xlsx,.csv,.doc,.docx"></div>
+    <div class="err" data-err="${esc(key)}"></div>
+    <div class="files">${list.map((f, i) => `<div class="file"><span class="ext">${esc(f.ext)}</span><div><b>${esc(f.name)}</b><div class="muted" style="font-size:12px">${(f.size / 1024).toFixed(0)} KB</div></div><a data-open="${esc(key)}|${i}">Open</a></div>`).join('')}</div></div>`;
+}
+function addFiles(key, fileList) {
+  const bad = [];
+  for (const f of fileList) {
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    if (!OK[ext]) { bad.push(`${f.name}: this file type isn't allowed`); continue; }
+    if (f.size > 10 * 1024 * 1024) { bad.push(`${f.name}: larger than 10 MB`); continue; }
+    (uploads[key] = uploads[key] || []).push({name: f.name, size: f.size, ext, url: URL.createObjectURL(f)});
+  }
+  render();
+  const e = document.querySelector(`[data-err="${CSS.escape(key)}"]`); if (e && bad.length) e.textContent = bad.join(' · ');
+}
+
+// ---------- Sheets-style column filters ----------
+const CF = {};          // per table: {f: {col: {vals:Set|null, min, max}}, sort: {col, dir}, limit}
+const TABLES = {};      // per table: {cols, rows} for the filter popover
+const BLANK = '(Blanks)';
+const monthLabel = d => isISO(d) ? `${MONTHS[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}` : (d ? 'Date not clear' : BLANK);
+function valuesOf(c, r) {
+  if (c.multi) { const a = c.multi(r).filter(x => x != null && x !== ''); return a.length ? a.map(String) : [BLANK]; }
+  const v = c.get(r);
+  if (c.type === 'date') return [monthLabel(v)];
+  if (v == null || v === '') return [BLANK];
+  return [String(v).trim()];
+}
+function colMatch(c, r, f) {
+  if (f.vals && !valuesOf(c, r).some(v => f.vals.has(v))) return false;
+  if (f.min != null || f.max != null) { const n = c.get(r); if (n == null || n === '') return false; if (f.min != null && n < f.min) return false; if (f.max != null && n > f.max) return false; }
+  return true;
+}
+const isActive = f => f && (f.vals || f.min != null || f.max != null);
+function cmpBy(c) {
+  if (c.order) return (a, b) => (c.order.indexOf(c.get(a)) + 1 || 99) - (c.order.indexOf(c.get(b)) + 1 || 99);
+  return (a, b) => { const x = c.get(a), y = c.get(b);
+    const bx = x == null || x === '', by = y == null || y === ''; if (bx || by) return bx === by ? 0 : bx ? 1 : -1;
+    if (c.type === 'num' || c.type === 'money') return x - y;
+    if (c.type === 'date') { const ix = isISO(x), iy = isISO(y); if (ix !== iy) return ix ? -1 : 1; return String(x).localeCompare(String(y)); }
+    return String(x).localeCompare(String(y), 'en', {numeric: true, sensitivity: 'base'}); };
+}
+const FUNNEL = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></svg>';
+function tbl(key, cols, rows, opt = {}) {
+  const st = CF[key] = CF[key] || {f: {}, sort: null, limit: opt.limit || 0};
+  TABLES[key] = {cols, rows};
+  const pass = (r, except) => cols.every(c => c.k === except || !isActive(st.f[c.k]) || colMatch(c, r, st.f[c.k]));
+  let shown = rows.filter(r => pass(r));
+  if (st.sort) { const c = cols.find(x => x.k === st.sort.col); if (c) { shown = [...shown].sort(cmpBy(c)); if (st.sort.dir < 0) shown.reverse(); } }
+  else if (opt.order) shown = [...shown].sort(opt.order);
+  const anyF = cols.some(c => isActive(st.f[c.k])) || st.sort;
+  const lim = st.limit || Infinity;
+  const head = cols.map(c => { const on = isActive(st.f[c.k]); const so = st.sort && st.sort.col === c.k ? (st.sort.dir > 0 ? ' ↑' : ' ↓') : '';
+    return `<th class="${c.type === 'num' || c.type === 'money' ? 'num' : ''}${c.k === 'sr' ? ' sr' : ''}"><span class="th">${esc(c.label)}${so}${c.nofilter ? '' : `<button class="fbtn${on ? ' on' : ''}" data-cf="${key}|${c.k}" title="Sort and filter">${FUNNEL}</button>`}</span></th>`; }).join('');
+  const body = shown.slice(0, lim).map(r => `<tr${opt.rowGo ? ` class="click" data-go="${opt.rowGo(r)}"` : ''}>${cols.map(c => `<td class="${c.type === 'num' || c.type === 'money' ? 'num' : ''}${c.k === 'sr' ? ' sr' : ''}">${c.cell ? c.cell(r) : c.type === 'date' ? fd(c.get(r)) : c.type === 'money' ? inr(c.get(r)) : val(c.get(r))}</td>`).join('')}</tr>`).join('');
+  const foot = opt.totals ? `<tfoot><tr>${cols.map((c, i) => `<td class="${c.type === 'money' ? 'num' : ''}">${i === 0 ? '' : opt.totals.includes(c.k) ? inr(shown.filter(c.totalIf || opt.totalIf || (() => true)).reduce((s, r) => s + (Number(c.get(r)) || 0), 0)) : i === 1 ? 'Total' : ''}</td>`).join('')}</tr></tfoot>` : '';
+  const meta = `<div class="tmeta">${anyF ? `Showing <b>${shown.length}</b> of ${rows.length} · <a data-cfclear="${key}">Clear filters and sort</a>` : `${rows.length} ${opt.noun || 'rows'}`}</div>`;
+  const more = shown.length > lim ? `<p style="padding:8px 10px;margin:0"><button class="btn small" data-cfmore="${key}">Show ${Math.min(200, shown.length - lim)} more</button> <span class="muted">${shown.length - lim} not shown</span></p>` : '';
+  return {shown, html: `${meta}<div class="card tablecard"><div class="tscroll"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted" style="padding:14px">No rows match these filters.</td></tr>`}</tbody>${foot}</table></div>${more}</div>`};
+}
+let pop = null;
+function openPop(btn) {
+  const [key, ck] = btn.dataset.cf.split('|'); const T = TABLES[key]; const c = T.cols.find(x => x.k === ck); const st = CF[key];
+  const pass = r => T.cols.every(x => x.k === ck || !isActive(st.f[x.k]) || colMatch(x, r, st.f[x.k]));
+  const counts = new Map(); T.rows.filter(pass).forEach(r => valuesOf(c, r).forEach(v => counts.set(v, (counts.get(v) || 0) + 1)));
+  let vals = [...counts.keys()];
+  const rank = v => v === BLANK ? 2 : v === 'Date not clear' ? 1 : 0;
+  if (c.order) vals.sort((a, b) => (c.order.indexOf(a) + 1 || 99) - (c.order.indexOf(b) + 1 || 99));
+  else if (c.type === 'date') vals.sort((a, b) => rank(a) - rank(b) || (b.slice(-4) + String(MONTHS.indexOf(b.slice(0, 3))).padStart(2, '0')).localeCompare(a.slice(-4) + String(MONTHS.indexOf(a.slice(0, 3))).padStart(2, '0')));
+  else if (c.type === 'num' || c.type === 'money') vals.sort((a, b) => rank(a) - rank(b) || Number(a) - Number(b));
+  else vals.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b, 'en', {numeric: true, sensitivity: 'base'}));
+  const cur = st.f[ck] || {};
+  const checked = v => !cur.vals || cur.vals.has(v);
+  const show = v => c.type === 'money' && v !== BLANK ? inr(v) : esc(v);
+  const r = btn.getBoundingClientRect();
+  const left = Math.min(window.scrollX + r.left - 8, window.scrollX + document.documentElement.clientWidth - 300);
+  $('#popBox').innerHTML = `<div class="pop" style="top:${window.scrollY + r.bottom + 6}px;left:${Math.max(8, left)}px">
+    <div class="ptitle">${esc(c.label)}</div>
+    <button class="pitem" data-pop="asc">Sort ${c.type === 'date' ? 'oldest first' : c.type === 'num' || c.type === 'money' ? 'smallest first' : 'A → Z'}</button>
+    <button class="pitem" data-pop="desc">Sort ${c.type === 'date' ? 'newest first' : c.type === 'num' || c.type === 'money' ? 'largest first' : 'Z → A'}</button>
+    ${c.type === 'num' || c.type === 'money' ? `<div class="psec">Filter by amount</div><div class="row" style="gap:6px;padding:0 12px"><input type="number" id="pmin" placeholder="Min" value="${cur.min ?? ''}" style="width:110px"><input type="number" id="pmax" placeholder="Max" value="${cur.max ?? ''}" style="width:110px"></div>` : ''}
+    <div class="psec">Filter by values${c.type === 'date' ? ' (month)' : ''}</div>
+    <div style="padding:0 12px"><input type="search" id="psearch" placeholder="Search" style="width:100%"></div>
+    <div class="row" style="padding:6px 12px;gap:12px;font-size:12.5px"><a data-pop="all">Select all</a><a data-pop="none">Clear</a><span class="muted" style="margin-left:auto">${vals.length} values</span></div>
+    <div class="plist">${vals.map(v => `<label data-v="${esc(v.toLowerCase())}"><input type="checkbox" value="${esc(v)}" ${checked(v) ? 'checked' : ''}> <span>${show(v)}</span><span class="muted" style="margin-left:auto">${counts.get(v)}</span></label>`).join('')}</div>
+    <div class="row pfoot"><button class="btn small" data-pop="cancel">Cancel</button><button class="btn small primary" data-pop="ok">OK</button></div></div>`;
+  pop = {key, ck, all: vals};
+  $('#psearch').addEventListener('input', e => { const s = e.target.value.toLowerCase(); document.querySelectorAll('.plist label').forEach(l => l.style.display = l.dataset.v.includes(s) ? '' : 'none'); });
+  $('#psearch').focus();
+}
+function popAction(a) {
+  const st = CF[pop.key];
+  if (a === 'cancel') return closePop();
+  if (a === 'asc' || a === 'desc') { st.sort = {col: pop.ck, dir: a === 'asc' ? 1 : -1}; closePop(); render(); return; }
+  if (a === 'all' || a === 'none') { document.querySelectorAll('.plist label').forEach(l => { if (l.style.display !== 'none') l.querySelector('input').checked = a === 'all'; }); return; }
+  if (a === 'ok') {
+    const sel = [...document.querySelectorAll('.plist input:checked')].map(i => i.value);
+    const f = {};
+    if (sel.length < pop.all.length) f.vals = new Set(sel);
+    const mn = $('#pmin'), mx = $('#pmax');
+    if (mn && mn.value !== '') f.min = Number(mn.value); if (mx && mx.value !== '') f.max = Number(mx.value);
+    if (isActive(f)) st.f[pop.ck] = f; else delete st.f[pop.ck];
+    if (st.limit) st.limit = 200;
+    closePop(); render();
+  }
+}
+const closePop = () => { $('#popBox').innerHTML = ''; pop = null; };
+
+// ---------- navigation ----------
+const crumbs = parts => `<div class="crumbs">${parts.map(([l, h]) => h ? `<a data-go="${h}">${esc(l)}</a>` : esc(l)).join(' / ')}</div>`;
+const folderCard = (href, title, sub) => `<a class="folder" data-go="${href}">${ico('folder')}<div><b>${esc(title)}</b><span>${esc(sub)}</span></div></a>`;
+const kv = pairs => `<div class="grid2">${pairs.map(([k, v]) => `<div class="kv"><small>${esc(k)}</small><div>${v}</div></div>`).join('')}</div>`;
+function renderNav(cur) {
+  const NAV = [['visits', 'Site visits', 'pin', D.visits.length], ['clients', 'Clients', 'users', D.clients.length], ['plots', 'Plots', 'grid', Object.keys(D.plots).length],
+    ['landowners', 'Sold plots', 'land', D.landowners.length], ['partner', 'Land partner', 'hand'], ['contractors', 'Contractors', 'tool', D.contractors.length],
+    ['expenses', 'Site expenses', 'coins', D.expenses.length], ['incentives', 'Incentives', 'award', D.incentives.length]];
+  $('#nav').innerHTML = '<div class="navlabel">Files</div>' + NAV.map(([k, l, i, c]) => `<a class="${cur === k ? 'on' : ''}" data-go="#/${k}">${ico(i)}${esc(l)}${c != null ? `<span class="ct">${c}</span>` : ''}</a>`).join('') +
+    `<div class="navlabel">Admin</div>${ME.role !== 'Agent' ? `<a class="${cur === 'users' ? 'on' : ''}" data-go="#/users">${ico('users')}Users</a>` : ''}<a class="${cur === 'history' ? 'on' : ''}" data-go="#/history">${ico('clock')}Edit history<span class="ct">${store.edits.filter(e => !e.undone).length}</span></a><a class="${cur === 'check' ? 'on' : ''}" data-go="#/check">${ico('check')}Data check<span class="ct">${D.payments.filter(p => !p.clients.length).length}</span></a>`;
+}
+const V = {};
+const plotView = {mode: 'list', hl: new Set(), before: false, after: true};
+const clientSel = {};
+
+// ---------- Site visits ----------
+const phoneCount = () => { const m = {}; D.visits.forEach(v => { if (v.phone) m[v.phone] = (m[v.phone] || 0) + 1; }); return m; };
+let showAdd = null;
+const FU_LABEL = ['No follow-up', 'FU1', 'FU2', 'FU3 (Sahil Bhai)', 'FU4 (Pratik Sir)'];
+V.visits = () => {
+  const pc = phoneCount();
+  const cols = [
+    {k: 'sr', label: 'Sr.', type: 'num', nofilter: true, get: v => v.sr},
+    {k: 'date', label: 'Visit date', type: 'date', get: v => v.date, cell: v => ed('visits', v, 'date', 'date')},
+    {k: 'name', label: 'Name', nofilter: true, get: v => v.name, cell: v => `<b>${ed('visits', v, 'name')}</b>`},
+    {k: 'phone', label: 'Phone', nofilter: true, get: v => v.phone, cell: v => ed('visits', v, 'phone')},
+    {k: 'by', label: 'Agent', get: v => v.by, multi: v => agentsOf(v.by), cell: v => ed('visits', v, 'by', 'select', 'agents')},
+    {k: 'status', label: 'Status', order: ['Follow up', 'Converted', 'Not interested', 'No status'], get: v => vStatus(v)[0], cell: v => ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${vStatus(v)[1]}">${vStatus(v)[0]}</span>`)},
+    {k: 'fu', label: 'Follow-up', get: v => FU_LABEL[fuStage(v)]},
+    {k: 'note', label: 'Latest note', nofilter: true, get: v => { const s = fuStage(v); return s ? v['fu' + s + 'Note'] : v.remark; }, cell: v => { const s = fuStage(v); return `<span class="muted">${val(s ? v['fu' + s + 'Note'] : v.remark)}</span>`; }}
+  ];
+  const t = tbl('visits', cols, D.visits, {rowGo: v => '#/visit/' + v.id, limit: 200, noun: 'visits', order: (a, b) => b.sr - a.sr});
+  return crumbs([['Files'], ['Site visits']]) + `<div class="row" style="justify-content:space-between"><h1>Site visits</h1><button class="btn primary" data-addvisit>+ Add visit</button></div>
+  <p class="sub">Every visitor is registered here first. Use the ${FUNNEL} button in any column header to sort or filter, as in Google Sheets. A Converted visit is locked for agents.</p>
+  ${t.html}`;
+};
+const openAddVisit = () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const chips = (name, list, on) => `<div class="chips" data-group="${name}">${list.map(x => `<button type="button" class="chip${x === on ? ' on' : ''}" data-chip="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
+  openDlg('Register a site visit', 'Every visitor is registered here first. It goes to the top of the Site visits list.', `
+  <div class="sec">Visitor</div>
+  <div class="g2"><label>Name *<input id="nv_name" placeholder="Full name"></label><label>Phone<input id="nv_phone" inputmode="numeric" maxlength="14" placeholder="10-digit mobile"></label></div>
+  <div id="nv_dup"></div>
+  <div class="sec">Visit</div>
+  <div class="g2"><label>Visit date *<input type="date" id="nv_date" value="${today}"></label><label>Agent *<select id="nv_by">${OPTS.agents.map(a => `<option>${esc(a)}</option>`).join('')}</select></label></div>
+  <label>Status${chips('status', OPTS.visitStatus.filter(s => s !== 'Converted' || ROLE() !== 'Agent'), 'Follow up')}</label>
+  <label>Note (people, budget, plot liked…)<input id="nv_extra" placeholder="e.g. 4 people, liked plot 120, budget 15 lakh"></label>
+  <div class="sec">What happened at the visit</div>
+  <div class="chips" data-group="deal"><button type="button" class="chip on" data-chip="none">Only visited</button><button type="button" class="chip" data-chip="hold">Took hold on a plot</button><button type="button" class="chip" data-chip="book">Booked a plot</button></div>
+  <div id="nv_deal" style="display:none;gap:12px">
+    <label>Plot * <span class="muted">(unsold plots only)</span><select id="nv_plot"><option value="">Choose a plot</option>${freePlots().map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
+    <div class="g2" id="nv_holdf"><label>Hold amount<input id="nv_hamt" type="number" value="1100"></label><label>Hold paid by${modeSel('nv_hmode', 'Cash')}</label></div>
+    <div class="g2" id="nv_bookf"><label>Final amount *<input id="nv_final" type="number" placeholder="Agreed price"></label><label>Booking amount / down payment<input id="nv_bamt" type="number"></label><label>Paid by${modeSel('nv_bmode', 'Cheque')}</label></div>
+  </div>
+  <label>Remark<textarea id="nv_remark" rows="2" placeholder="Anything else about the visit"></textarea></label>
+  <div class="sec">First follow-up</div>
+  <div class="g2"><label>Follow-up date<input type="date" id="nv_fu1d"></label><label>Follow-up note<input id="nv_fu1n" placeholder="What to talk about"></label></div>`, 'Save visit', () => saveNew('visit'), true);
+};
+const freePlots = () => Object.values(D.plots).filter(p => plotClass(p)[1] === 'Unsold').sort((a, b) => a.sr - b.sr);
+const modeSel = (idn, on) => `<select id="${idn}">${OPTS.payMode.map(m => `<option ${m === on ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
+const today = () => new Date().toISOString().slice(0, 10);
+const stamp = () => Date.now().toString(36);
+function runFlow(f, msg, go) {
+  const s = snap(); applyFlow(f); closeDlg(); commit(s, [f], msg, go);
+}
+function flowDlg(ds) {
+  const err = m => { $('#dlg_err').textContent = m; return false; };
+  const num = idn => { const x = $(idn).value; return x === '' ? null : Number(x); };
+  if (ds.flow === 'hold') {
+    const v = ds.vid ? IDX.visits[ds.vid] : null; const c0 = ds.cid ? clientById[ds.cid] : (v && v.client ? clientById[v.client] : null);
+    const ph = (c0 && c0.phone) || (v && v.phone) || ''; const nm = (c0 && c0.name) || (v && v.name) || '';
+    const free = freePlots();
+    openDlg('Take hold on a plot', v ? 'From the site visit of ' + esc(v.name || '') + ' · ' + fd(v.date) : 'For ' + esc(nm), `
+    ${c0 ? `<div class="note" style="margin:0">This will be added to the existing client folder <b>${esc(c0.name)}</b>.</div>` : ''}
+    <div class="g2"><label>Client name *<input id="fh_name" value="${esc(nm)}"${c0 ? ' disabled' : ''}></label><label>Phone<input id="fh_phone" value="${esc(ph)}" inputmode="numeric" maxlength="14"${c0 ? ' disabled' : ''}></label></div>
+    <div id="fh_match"></div>
+    <label>Plot * <span class="muted">(only plots that are still unsold: ${free.length})</span><select id="fh_plot"><option value="">Choose a plot</option>${free.map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
+    <div class="g2"><label>Hold amount<input id="fh_amt" type="number" value="1100"></label><label>Hold date *<input id="fh_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>Paid by${modeSel('fh_mode', 'Cash')}</label><label>Agent<select id="fh_by">${OPTS.agents.map(a => `<option ${a === (v && agentsOf(v.by)[0]) ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label></div>
+    <label>Note<input id="fh_note" placeholder="Optional"></label>`, 'Save hold', () => {
+      const name = c0 ? c0.name : $('#fh_name').value.trim(); const phone = c0 ? c0.phone : $('#fh_phone').value.replace(/\D/g, '') || null;
+      if (!name) return err('Enter the client name.'); if (phone && phone.length !== 10) return err('Phone number should have 10 digits.');
+      const plot = $('#fh_plot').value; if (!plot) return err('Choose the plot.'); if (!$('#fh_date').value) return err('Enter the hold date.');
+      const match = !c0 && phone ? D.clients.find(x => x.phone === phone) : null; const target = c0 || match;
+      const s = stamp();
+      const f = {type: 'hold', at: new Date().toISOString(), role: ROLE(), vid: v ? v.id : null, cid: target ? target.id : 'CN' + s, csr: target ? target.sr : maxSr(D.clients) + 1, name, phone,
+        bid: 'BN' + s, bsr: maxSr(D.bookings) + 1, pid: 'PN' + s, psr: maxSr(D.payments) + 1, plot, amount: num('#fh_amt'), date: $('#fh_date').value, mode: $('#fh_mode').value, by: $('#fh_by').value, visitDate: v ? v.date : null, note: $('#fh_note').value.trim() || null};
+      runFlow(f, 'Plot ' + plot + ' is now on hold for ' + name, '#/client/' + f.cid);
+    }, true);
+    const hint = () => { const d = ($('#fh_phone').value || '').replace(/\D/g, ''); const m = !c0 && d.length === 10 && D.clients.find(x => x.phone === d); $('#fh_match').innerHTML = m ? `<div class="warn">This number is already the client <b>${esc(m.name)}</b>. The hold will go into that folder.</div>` : ''; };
+    if (!c0) { $('#fh_phone').addEventListener('input', hint); hint(); }
+  } else if (ds.flow === 'book') {
+    const b = bookingById[ds.bid]; const c = clientById[ds.cid]; const pl = D.plots[b.plot];
+    const vlist = D.visits.filter(x => x.client === c.id).sort((a, z) => String(z.date || '').localeCompare(String(a.date || '')));
+    openDlg('Book plot ' + esc(b.plot), esc(c.name) + ' · on hold since ' + fd(b.holdDate) + (pl && pl.area ? ' · ' + pl.area + ' sq yd' : ''), `
+    <label>Final amount * <span class="muted">(the agreed price of the plot)</span><input id="fb_final" type="number" placeholder="e.g. 1100000"></label>
+    <div class="g2"><label>Booking amount / down payment<input id="fb_amt" type="number" placeholder="Amount received now"></label><label>Date *<input id="fb_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>Paid by${modeSel('fb_mode', 'Cheque')}</label><label>Loan<select id="fb_loan"><option>No</option><option>Yes</option></select></label></div>
+    <div class="g2"><label>Loan amount<input id="fb_lamt" type="number"></label><label>EMI<input id="fb_emi" type="number"></label></div>
+    <div class="note" style="margin:0">Saving marks the plot Sold, the booking Converted${vlist.length ? ' and the site visit Converted' : ''}. The document status starts as "MOU not done".</div>`, 'Book plot', () => {
+      const final = num('#fb_final'); if (!final) return err('Enter the final amount.'); if (!$('#fb_date').value) return err('Enter the date.');
+      const s = stamp();
+      const f = {type: 'book', at: new Date().toISOString(), role: ROLE(), bid: b.id, cid: c.id, vid: vlist[0] ? vlist[0].id : null, final, amount: num('#fb_amt'), date: $('#fb_date').value, mode: $('#fb_mode').value,
+        loan: $('#fb_loan').value, loanAmount: num('#fb_lamt'), emi: num('#fb_emi'), pid: 'PN' + s, psr: maxSr(D.payments) + 1};
+      runFlow(f, 'Plot ' + b.plot + ' booked for ' + c.name);
+    }, true);
+  } else if (ds.flow === 'pay') {
+    const c = clientById[ds.cid]; const plots = clientPlots(c);
+    openDlg('Add payment', esc(c.name), `
+    <div class="g2"><label>Amount *<input id="fp_amt" type="number"></label><label>Date *<input id="fp_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>Paid by${modeSel('fp_mode', 'Cheque')}</label><label>For plot<select id="fp_plot">${plots.length > 1 ? '<option value="">All plots / not specific</option>' : ''}${plots.map(p => `<option ${clientSel[c.id] === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label></div>
+    <label>Note<input id="fp_note" placeholder="e.g. 2nd instalment, cheque no. 000123"></label>`, 'Save payment', () => {
+      const amount = num('#fp_amt'); if (!amount) return err('Enter the amount.'); if (!$('#fp_date').value) return err('Enter the date.');
+      const plot = $('#fp_plot').value || null; const note = $('#fp_note').value.trim() || null;
+      const f = {type: 'pay', at: new Date().toISOString(), role: ROLE(), cid: c.id, pid: 'PN' + stamp(), psr: maxSr(D.payments) + 1, amount, date: $('#fp_date').value, mode: $('#fp_mode').value, plot, note, text: 'Payment' + (plot ? ' · plot ' + plot : '')};
+      runFlow(f, inr(amount) + ' added for ' + c.name);
+    });
+  } else if (ds.flow === 'lapse') {
+    const b = bookingById[ds.bid]; const c = clientById[ds.cid];
+    openDlg('Hold lapsed · plot ' + esc(b.plot), esc(c.name) + ' · on hold since ' + fd(b.holdDate) + (b.holdAmount ? ' · ' + inr(b.holdAmount) : ''), `
+    <label>Hold money${'<div class="chips" data-group="refund"><button type="button" class="chip on" data-chip="no">Not refunded</button><button type="button" class="chip" data-chip="yes">Refunded</button></div>'}</label>
+    <label>Date<input id="fl_date" type="date" value="${today()}"></label>
+    <div class="note" style="margin:0">Plot ${esc(b.plot)} goes back to Unsold, so it can be held for someone else.</div>`, 'Mark lapsed', () => {
+      const r = $('#dlg .chips[data-group=refund] .chip.on').dataset.chip === 'yes';
+      runFlow({type: 'lapse', at: new Date().toISOString(), role: ROLE(), bid: b.id, cid: c.id, refund: r, date: $('#fl_date').value || today()}, 'Plot ' + b.plot + ' is unsold again');
+    });
+  }
+}
+function dealFields() {
+  const k = ($('#dlg .chips[data-group=deal] .chip.on') || {dataset: {}}).dataset.chip; const box = $('#nv_deal'); if (!box) return;
+  box.style.display = k === 'none' ? 'none' : 'grid'; $('#nv_holdf').style.display = k === 'hold' ? '' : 'none'; $('#nv_bookf').style.display = k === 'book' ? '' : 'none';
+  const sts = $('#dlg .chips[data-group=status]'); if (sts && k !== 'none') sts.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.chip === (k === 'book' && ROLE() !== 'Agent' ? 'Converted' : 'Follow up')));
+}
+function visitDupHint() {
+  const ph = ($('#nv_phone') || {}).value; const d = ph ? ph.replace(/\D/g, '') : ''; const box = $('#nv_dup'); if (!box) return;
+  const m = d.length === 10 ? D.visits.filter(v => v.phone === d) : [];
+  box.innerHTML = m.length ? `<div class="warn">This number already has ${m.length} visit${m.length > 1 ? 's' : ''}: ${m.slice(0, 3).map(v => `<a data-go="#/visit/${v.id}">${esc(v.name || 'visit')} · ${fd(v.date)}</a>`).join(', ')}${m.length > 3 ? '…' : ''}. You can still save it as a new visit.</div>` : '';
+}
+V.visit = id => {
+  const v = IDX.visits[id]; if (!v) return '<p>Visit not found.</p>';
+  const s = vStatus(v); const c = v.client && clientById[v.client];
+  const others = v.phone ? D.visits.filter(x => x.phone === v.phone && x.id !== v.id) : [];
+  const who = i => i <= 2 ? (v.by || 'Agent') : i === 3 ? 'Sahil Bhai' : 'Pratik Sir';
+  return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
+  <button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div><p class="sub">Sr. ${v.sr}</p>
+  <div class="split"><div>
+  <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Note', ed('visits', v, 'extra')], ['Remark', ed('visits', v, 'remark')]])}</div>
+  ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
+  <div class="card"><h2>Follow-ups</h2><table><thead><tr><th>Step</th><th>Done by</th><th>Date</th><th>Note</th></tr></thead><tbody>${[1, 2, 3, 4].map(i => `<tr><td>Follow-up ${i}</td><td>${esc(who(i))}</td><td>${ed('visits', v, 'fu' + i + 'Date', 'date')}</td><td>${ed('visits', v, 'fu' + i + 'Note')}</td></tr>`).join('')}</tbody></table>
+  ${v.fuRemark || v.paymentNote ? `<p class="muted" style="margin:10px 0 0">${esc([v.fuRemark, v.paymentNote].filter(Boolean).join(' · '))}</p>` : ''}</div>
+  ${others.length ? `<div class="card"><h2>Other visits by this number</h2>${others.map(o => `<div style="padding:4px 0"><a data-go="#/visit/${o.id}" style="cursor:pointer;color:var(--accent)">Sr. ${o.sr} · ${fd(o.date)}</a> <span class="muted">· ${esc(vStatus(o)[0])} · ${esc(o.by || '')}</span></div>`).join('')}</div>` : ''}
+  </div><div>${dropzone('visit/' + v.id, 'Visit photos & slips')}</div></div>`;
+};
+
+// ---------- Clients ----------
+V.clients = () => {
+  const cols = [
+    {k: 'sr', label: 'Sr.', type: 'num', nofilter: true, get: c => c.sr},
+    {k: 'name', label: 'Client', nofilter: true, get: c => c.name, cell: c => `<b>${ed('clients', c, 'name')}</b>`},
+    {k: 'phone', label: 'Phone', nofilter: true, get: c => c.phone, cell: c => ed('clients', c, 'phone')},
+    {k: 'plots', label: 'Plots', nofilter: true, get: c => clientPlots(c).join(', ')},
+    {k: 'size', label: 'Plot size (sq yd)', type: 'num', get: clientSize},
+    {k: 'agent', label: 'Agent', get: c => (bookingById[c.bookings[0]] || {}).by, multi: c => [...new Set(c.bookings.flatMap(id => agentsOf(bookingById[id].by)))]},
+    {k: 'status', label: 'Status', order: ['Booked', 'On hold', 'Lapsed'], get: c => clientStatus(c)[0], cell: c => `<span class="badge ${clientStatus(c)[1]}">${clientStatus(c)[0]}</span>`},
+    {k: 'doc', label: 'Document status', order: DOC_OPTS, get: c => c.docStatus, cell: c => ed('clients', c, 'docStatus', 'select', 'docStatus')},
+    {k: 'hold', label: 'Last hold date', type: 'date', get: c => (lastHoldBooking(c) || {}).holdDate},
+    {k: 'holdAmt', label: 'Hold amount', type: 'money', nofilter: true, get: c => (lastHoldBooking(c) || {}).holdAmount},
+    {k: 'final', label: 'Final amount', type: 'money', nofilter: true, totalIf: c => clientStatus(c)[0] === 'Booked', get: clientFinal},
+    {k: 'paid', label: 'Paid till now', type: 'money', nofilter: true, get: c => paidOf(clientPayments(c.id)) || null}
+  ];
+  const t = tbl('clients', cols, D.clients, {rowGo: c => '#/client/' + c.id, noun: 'clients', order: (a, b) => a.sr - b.sr, totals: ['final', 'paid']});
+  return crumbs([['Files'], ['Clients']]) + `<h1>Clients</h1><p class="sub">One folder per client. The Final amount total counts booked clients only. Paid till now leaves out returned cheques.</p>${t.html}`;
+};
+V.client = id => {
+  const c = clientById[id]; if (!c) return '<p>Client not found.</p>';
+  const s = clientStatus(c); const bks = c.bookings.map(x => bookingById[x]); const pays = clientPayments(c.id);
+  const owned = c.plots.filter(p => plotOwner[p] === c.id); const plots = clientPlots(c);
+  const final = clientFinal(c), paid = paidOf(pays), ret = pays.filter(p => !received(p));
+  const b0 = bks[0] || {};
+  const multi = plots.length > 1; let sel = clientSel[id]; if (!sel || (sel !== 'all' && !plots.includes(sel))) sel = multi ? plots[0] : 'all';
+  const mine = new Set(plots);
+  const plotPaid = pn => pays.filter(received).reduce((a, p) => { const own = (p.plots || []).filter(x => mine.has(x)); return own.includes(pn) ? a + (p.amount || 0) / own.length : a; }, 0);
+  const priceOf = pn => { const l = plotOwner[pn] === id && D.landowners.find(x => x.plot === pn); return l ? l.saleValue : null; };
+  const finalOf = pn => { const b = bks.find(x => x.plot === pn && isConvertedBooking(x)) || bks.find(x => x.plot === pn); return b ? b.finalAmount : null; };
+  const sum = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) : null; };
+  const H = sel === 'all'
+    ? {no: plots.join(', ') || '—', size: clientSize(c), price: sum(plots.map(priceOf)), final, paid}
+    : {no: sel, size: D.plots[sel] ? D.plots[sel].area : null, price: priceOf(sel), final: finalOf(sel), paid: Math.round(plotPaid(sel))};
+  const rem = H.final != null ? H.final - H.paid : null;
+  const shownPlots = sel === 'all' ? plots : [sel];
+  const shownPays = sel === 'all' ? pays : pays.filter(p => (p.plots || []).includes(sel));
+  const plotCard = p => {
+    const bp = bks.filter(x => x.plot === p); const b = bp.find(isConvertedBooking) || bp.find(x => /hold/i.test(x.outcome || '')) || bp[bp.length - 1]; const d = owned.includes(p) ? D.dastavej[p] : null; const r = owned.includes(p) ? D.registry[p] : null; const pl = D.plots[p];
+    return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : /hold/i.test(b.outcome || '') ? 'b-hold' : 'b-lapsed'}">${val(b.outcome)}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
+    ${b && /hold/i.test(b.outcome || '') ? `<div class="acts"><span>This plot is on hold since ${fd(b.holdDate)}.</span><button class="btn primary small" data-flow="book" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Book this plot</button><button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Hold lapsed</button></div>` : ''}
+    ${b ? `<div class="psub">Hold and booking</div>${kv([['Hold date', ed('bookings', b, 'holdDate', 'date')], ['Hold amount', ed('bookings', b, 'holdAmount', 'money')], ['Hold paid by', ed('bookings', b, 'holdMode', 'select', 'payMode')], ['Refund', ed('bookings', b, 'refunded')], ['Plot final amount', ed('bookings', b, 'finalAmount', 'money')], ['Down payment', ed('bookings', b, 'dpAmount', 'money')], ['Down payment date', ed('bookings', b, 'dpDate', 'date')], ['Loan', ed('bookings', b, 'loan', 'select', 'yesNo')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')], ['Payment status', ed('bookings', b, 'payment')]])}` : ''}
+    ${b || d ? `<div class="psub">MOU and dastavej</div>${kv([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}` : ''}
+    ${r ? `<div class="psub">Registry and maintenance</div>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance deposit', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')], ['Maintenance cheque', b ? ed('bookings', b, 'maintenanceCheque') : '—']])}` : ''}
+    ${b && (b.remarks || b.paymentRemarks || b.dastavejRemarks) ? `<p class="muted" style="margin:12px 0 0">${esc([b.remarks, b.paymentRemarks, b.dastavejRemarks].filter(Boolean).join(' · '))}</p>` : ''}</div>`; };
+  const payT = shownPays.length ? tbl('pay-' + c.id + '-' + sel, [
+      {k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date, cell: p => ed('payments', p, 'date', 'date')},
+      {k: 'text', label: 'Entry', get: p => p.text, cell: p => ed('payments', p, 'text')}, {k: 'mode', label: 'Mode', get: p => p.mode, cell: p => ed('payments', p, 'mode', 'select', 'payMode')},
+      {k: 'status', label: 'Status', get: p => p.status, cell: p => ed('payments', p, 'status', 'select', 'payStatus', payBadge(p))},
+      {k: 'note', label: 'Note', get: p => p.note, cell: p => ed('payments', p, 'note')},
+      {k: 'amount', label: 'Amount', type: 'money', get: p => p.amount, cell: p => amtCell(p, ed('payments', p, 'amount', 'money'))}], shownPays, {totals: ['amount'], totalIf: received, noun: 'payments'}).html : `<p class="muted">No payments linked to this ${sel !== 'all' ? 'plot' : 'client'}.</p>`;
+  const vs = D.visits.filter(x => x.client === id);
+  return crumbs([['Files'], ['Clients', '#/clients'], [c.name]]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${ed('clients', c, 'name')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
+  <div class="row" style="gap:8px"><button class="btn" data-flow="hold" data-cid="${esc(id)}">+ Hold another plot</button><button class="btn primary" data-flow="pay" data-cid="${esc(id)}">+ Add payment</button></div></div>
+  <p class="sub">Sr. ${c.sr} · ${ed('clients', c, 'phone')}${plots.length ? ' · Plot ' + plots.map(esc).join(', ') : ''}${b0.by ? ' · Agent: ' + esc(b0.by) : ''}</p>
+  ${multi ? `<div class="row" style="gap:6px;margin:0 0 12px;flex-wrap:wrap"><span class="muted" style="font-size:12.5px;margin-right:4px">Show plot</span>${plots.map(pn => `<span class="chip${sel === pn ? ' on' : ''}" data-cid="${esc(id)}" data-csel="${esc(pn)}">Plot ${esc(pn)}</span>`).join('')}<span class="chip${sel === 'all' ? ' on' : ''}" data-cid="${esc(id)}" data-csel="all">All plots</span></div>` : ''}
+  <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(128px,1fr))"><div class="stat"><small>Plot no.</small><div>${esc(H.no)}</div></div>
+  <div class="stat"><small>Plot size</small><div>${H.size != null ? (Math.round(H.size * 100) / 100).toLocaleString('en-IN') + ' <span style="font-size:12px;color:var(--ink3)">sq yd</span>' : '—'}</div></div>
+  <div class="stat"><small>Plot price</small><div>${inr(H.price)}</div></div>
+  <div class="stat"><small>Final amount</small><div>${inr(H.final)}</div></div>
+  <div class="stat"><small>Paid till now</small><div>${inr(H.paid)}</div></div>
+  <div class="stat"><small>Remaining balance</small><div style="color:${rem != null && rem > 0 ? 'var(--lapsed)' : 'var(--sold)'}">${rem != null ? inr(rem) : '—'}</div></div>
+  <div class="stat"><small>Document status</small><div style="font-size:15px;padding-top:4px">${ed('clients', c, 'docStatus', 'select', 'docStatus')}</div></div></div>
+  ${sel !== 'all' && pays.some(p => (p.plots || []).filter(x => mine.has(x)).length > 1 && p.plots.includes(sel)) ? `<div class="note">A payment written for more than one plot is split equally between those plots here.</div>` : ''}
+  ${ret.length ? `<div class="note">${ret.length} returned cheque${ret.length > 1 ? 's' : ''} (${inr(ret.reduce((a, p) => a + (p.amount || 0), 0))}) not counted in Paid till now.</div>` : ''}
+  <div class="split"><div>${shownPlots.map(plotCard).join('')}<h2 style="font-size:15px;margin:6px 0 8px">Payments${sel !== 'all' ? ' for plot ' + esc(sel) : ''}</h2>${payT}</div>
+  <div>${dropzone(id, 'Documents')}
+  ${vs.length ? `<div class="card"><h2>Site visits</h2>${vs.map(x => `<div style="padding:4px 0"><a data-go="#/visit/${x.id}" style="cursor:pointer;color:var(--accent)">Sr. ${x.sr} · ${fd(x.date)}</a> <span class="muted">· ${esc(x.by || '')}</span></div>`).join('')}</div>` : ''}
+  <div class="card"><h2>How this folder was put together</h2>${c.links.map(l => `<div style="padding:3px 0;font-size:13px">${val(l.name)} <span class="muted">· ${esc(l.source)}${l.plot ? ' · plot ' + esc(l.plot) : ''} · ${esc(l.how)}</span></div>`).join('')}</div></div></div>`;
+};
+
+// ---------- Plots ----------
+V.plots = () => {
+  const conv = new Set(D.bookings.filter(isConvertedBooking).map(b => b.plot));
+  const cols = [
+    {k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr},
+    {k: 'no', label: 'Plot', type: 'num', get: p => parseInt(p.no) || null, cell: p => `<b>${esc(p.no)}</b>`},
+    {k: 'status', label: 'Status', get: p => plotClass(p)[1], cell: p => ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${plotClass(p)[2]}">${plotClass(p)[1]}</span>`)},
+    {k: 'area', label: 'Area (sq yd)', type: 'num', get: p => p.area, cell: p => ed('plots', p, 'area', 'number')},
+    {k: 'client', label: 'Client', get: p => plotOwner[p.no] ? clientById[plotOwner[p.no]].name : null},
+    {k: 'booking', label: 'Booking list', get: p => conv.has(p.no) ? 'Converted' : D.bookings.some(b => b.plot === p.no && /hold/i.test(b.outcome || '')) ? 'On hold' : D.bookings.some(b => b.plot === p.no) ? 'Lapsed only' : null},
+    {k: 'note', label: 'Note', get: p => p.note, cell: p => ed('plots', p, 'note')}
+  ];
+  const every = Object.values(D.plots); const isPre = p => p.trpl === 'Before TRPL'; const nPre = every.filter(isPre).length;
+  const all = every.filter(p => isPre(p) ? plotView.before : plotView.after);
+  const t = tbl('plots', cols, all, {rowGo: p => '#/plot/' + encodeURIComponent(p.no), noun: 'plots', order: (a, b) => a.sr - b.sr});
+  return crumbs([['Files'], ['Plots']]) + `<div class="row" style="justify-content:space-between"><h1>Plots</h1><div class="row">${['list', 'grid'].map(k => `<span class="chip ${plotView.mode === k ? 'on' : ''}" data-pv="${k}">${k === 'grid' ? 'Grid' : 'List'}</span>`).join('')}</div></div>
+  <p class="sub">${every.length} plots in the Plot List sheet. In the grid, click a colour to highlight those plots; the rest fade but stay in place.</p>
+  <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="muted" style="font-size:12.5px;margin-right:4px">Show</span><span class="chip${plotView.after ? ' on' : ''}" data-phase="after">TRPL plots <span class="muted">${every.length - nPre}</span></span><span class="chip${plotView.before ? ' on' : ''}" data-phase="before">Before TRPL <span class="muted">${nPre}</span></span><span class="muted" style="font-size:12.5px;margin-left:4px">${plotView.before && plotView.after ? 'Showing all plots' : plotView.before ? 'Showing only plots sold before TRPL' : 'Plots sold before TRPL are hidden'}</span></div>
+  ${plotView.mode === 'grid' ? `<div class="legend">${[['Sold', 'var(--sold)'], ['Sold before TRPL', '#9fb8ae'], ['Hold', '#e3a23b'], ['Unsold', '#fff;border:1px solid var(--line2)'], ['Development area', '#e4e2dc']].map(([k, c]) => `<span class="ltag${plotView.hl.size && !plotView.hl.has(k) ? ' dim' : ''}${plotView.hl.has(k) ? ' on' : ''}" data-hl="${k}"><i style="background:${c}"></i>${k} <span class="muted">${t.shown.filter(p => plotClass(p)[1] === k).length}</span></span>`).join('')}${plotView.hl.size ? '<a class="ltag" data-hl="" style="color:var(--accent)">Show all</a>' : ''}</div>
+  <div class="card"><div class="plotgrid">${t.shown.map(p => `<div class="pt ${plotClass(p)[0]}${plotView.hl.size && !plotView.hl.has(plotClass(p)[1]) ? ' faded' : ''}" title="Plot ${esc(p.no)} · ${plotClass(p)[1]}${p.area ? ' · ' + p.area + ' sq yd' : ''}" data-go="#/plot/${encodeURIComponent(p.no)}">${esc(p.no)}</div>`).join('') || '<p class="muted">No plots match.</p>'}</div></div>` : t.html}`;
+};
+V.plot = no => {
+  const p = D.plots[no] || {no, id: no, status: null}; const pc = plotClass(p);
+  const owner = plotOwner[no] ? clientById[plotOwner[no]] : null;
+  const bks = D.bookings.filter(b => b.plot === no); const d = D.dastavej[no]; const r = D.registry[no]; const l = landByPlot()[no];
+  const pays = D.payments.filter(x => x.plots.includes(no));
+  return crumbs([['Files'], ['Plots', '#/plots'], ['Plot ' + no]]) + `<h1>Plot ${esc(no)} <span class="badge ${pc[2]}" style="vertical-align:4px">${pc[1]}</span></h1><p class="sub">Sr. ${p.sr || '—'}</p>
+  <div class="split"><div>
+  ${D.plots[no] ? `<div class="card"><h2>Plot <span class="src">Plot List sheet</span></h2>${kv([['Status', ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${pc[2]}">${pc[1]}</span>`)], ['Area (sq yd)', ed('plots', p, 'area', 'number')], ['Note', ed('plots', p, 'note')]])}</div>` : ''}
+  ${owner ? `<div class="card"><h2>Client</h2><a class="folder" data-go="#/client/${owner.id}">${ico('users')}<div><b>${esc(owner.name)}</b><span>${esc(owner.phone || '')} · open client folder</span></div></a></div>` : ''}
+  <div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Holds and bookings <span class="src">Booking list</span></h2>${bks.length ? `<table><thead><tr><th class="sr">Sr.</th><th>Client</th><th>Hold date</th><th>Outcome</th><th class="num">Finalised</th><th class="num">Down payment</th></tr></thead><tbody>${bks.map(b => `<tr class="click" data-go="#/client/${D.clients.find(c => c.bookings.includes(b.id)).id}"><td class="sr">${b.sr}</td><td>${val(b.client)}</td><td>${ed('bookings', b, 'holdDate', 'date')}</td><td>${ed('bookings', b, 'outcome', 'select', 'outcome')}</td><td class="num">${ed('bookings', b, 'finalAmount', 'money')}</td><td class="num">${ed('bookings', b, 'dpAmount', 'money')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="padding:0 10px">None.</p>'}</div>
+  ${d ? `<div class="card"><h2>Dastavej <span class="src">Dastavej sheet</span></h2>${kv([['Name on dastavej', ed('dastavej', d, 'client')], ['Date', ed('dastavej', d, 'date', 'date')], ['Financial year', ed('dastavej', d, 'fy')], ['Finalised amount', ed('dastavej', d, 'finalAmount', 'money')], ['Status', ed('dastavej', d, 'status')], ['Type', ed('dastavej', d, 'kind')]])}</div>` : ''}
+  ${r ? `<div class="card"><h2>Registry & maintenance <span class="src">Registry sheet</span></h2>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')]])}</div>` : ''}
+  ${l ? `<div class="card"><h2>Sold plot register <span class="src">Sr. ${l.sr}</span></h2>${kv([['Owner', ed('landowners', l, 'owner')], ['Sq yard', ed('landowners', l, 'sqYard', 'number')], ['Total sale value', ed('landowners', l, 'saleValue', 'money')], ['Anjanee paid', ed('landowners', l, 'anjaneePaid', 'money')]])}</div>` : ''}
+  ${pays.length ? `<div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Payments mentioning this plot</h2><table><tbody>${pays.map(x => `<tr><td class="sr">${x.sr}</td><td>${ed('payments', x, 'date', 'date')}</td><td>${ed('payments', x, 'text')}</td><td>${ed('payments', x, 'status', 'select', 'payStatus', payBadge(x))}</td><td class="num">${amtCell(x, ed('payments', x, 'amount', 'money'))}</td></tr>`).join('')}</tbody></table></div>` : ''}
+  </div><div>${dropzone('plot/' + no, 'Plot papers')}</div></div>`;
+};
+
+// ---------- Landowners / partner ----------
+V.landowners = () => {
+  const t = tbl('landowners', [
+    {k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'plot', label: 'Plot', get: x => x.plot, cell: x => ed('landowners', x, 'plot')},
+    {k: 'owner', label: 'Owner', get: x => x.owner, cell: x => ed('landowners', x, 'owner')}, {k: 'sq', label: 'Sq yd', type: 'num', get: x => x.sqYard, cell: x => ed('landowners', x, 'sqYard', 'number')},
+    {k: 'sale', label: 'Total sale value', type: 'money', get: x => x.saleValue, cell: x => ed('landowners', x, 'saleValue', 'money')},
+    {k: 'paid', label: 'Paid', type: 'money', get: x => x.anjaneePaid, cell: x => ed('landowners', x, 'anjaneePaid', 'money')}], D.landowners, {rowGo: x => '#/plot/' + encodeURIComponent(x.plot), totals: ['sale', 'paid'], noun: 'plots', order: (a, b) => a.sr - b.sr});
+  return crumbs([['Files'], ['Sold plots']]) + `<h1>Sold plots</h1><p class="sub">Plots sold to buyers, as in the "DASTAVEJ PAYMENT" sheet.</p>
+  <div class="split"><div>${t.html}</div><div>${dropzone('landowners', 'Sold plot documents')}</div></div>`;
+};
+V.partner = () => {
+  const L = D.landowners.filter(x => x.anjaneePaid != null || x.anjaneeRemaining != null);
+  const t = tbl('partner', [{k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'plot', label: 'Plot', get: x => x.plot}, {k: 'owner', label: 'Owner', get: x => x.owner},
+    {k: 'paid', label: 'Paid', type: 'money', get: x => x.anjaneePaid, cell: x => ed('landowners', x, 'anjaneePaid', 'money')}], L, {rowGo: x => '#/plot/' + encodeURIComponent(x.plot), totals: ['paid'], noun: 'plots', order: (a, b) => a.sr - b.sr});
+  const paid = t.shown.reduce((a, x) => a + (x.anjaneePaid || 0), 0);
+  return crumbs([['Files'], ['Land partner – Anjanee Infraspace']]) + `<h1>Land partner – Anjanee Infraspace</h1><p class="sub">Settlement per plot, from the Anjanee Infraspace columns in the Sold plots sheet.</p>
+  <div class="stats"><div class="stat"><small>Paid</small><div>${inr(paid)}</div></div><div class="stat"><small>Plots</small><div>${t.shown.length}</div></div></div>
+  <div class="split"><div>${t.html}</div><div>${dropzone('partner', 'Agreements & settlement papers')}</div></div>`;
+};
+
+// ---------- Contractors ----------
+V.contractors = () => crumbs([['Files'], ['Contractors']]) + `<h1>Contractors</h1><p class="sub">One folder and ledger per contractor.</p>` + tbl('contractors', [
+  {k: 'sr', label: 'Sr.', type: 'num', get: c => D.contractors.indexOf(c) + 1}, {k: 'name', label: 'Contractor', get: c => c.name, cell: c => `<b>${esc(c.name)}</b>`},
+  {k: 'n', label: 'Ledger entries', type: 'num', get: c => c.ledger.length}, {k: 'lt', label: 'Ledger total', type: 'money', get: c => c.ledger.reduce((a, x) => a + (x.amount || 0), 0)},
+  {k: 'et', label: 'Tagged site expenses', type: 'money', get: c => c.expenses.reduce((a, x) => a + (x.amount || 0), 0)}], D.contractors, {rowGo: c => '#/contractor/' + encodeURIComponent(c.name), totals: ['lt', 'et'], noun: 'contractors'}).html;
+V.contractor = name => {
+  const c = D.contractors.find(x => x.name === name); if (!c) return '<p>Not found.</p>';
+  const l = tbl('ledger-' + name, [{k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'date', label: 'Date', type: 'date', get: x => x.date, cell: x => ed('ledger', x, 'date', 'date')},
+    {k: 'part', label: 'Particular', get: x => x.particular, cell: x => ed('ledger', x, 'particular')}, {k: 'rem', label: 'Remarks', get: x => x.remarks, cell: x => ed('ledger', x, 'remarks')},
+    {k: 'amt', label: 'Amount', type: 'money', get: x => x.amount, cell: x => ed('ledger', x, 'amount', 'money')}], c.ledger, {totals: ['amt'], noun: 'entries'});
+  const e = tbl('cexp-' + name, [{k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'date', label: 'Date', type: 'date', get: x => x.date, cell: x => ed('expenses', x, 'date', 'date')},
+    {k: 'part', label: 'Particulars', get: x => x.particulars, cell: x => ed('expenses', x, 'particulars')}, {k: 'for', label: 'For', get: x => expFor(x), cell: x => ed('expenses', x, 'for', 'select', 'forWhat')},
+    {k: 'amt', label: 'Amount', type: 'money', get: x => x.amount, cell: x => ed('expenses', x, 'amount', 'money')}], c.expenses, {totals: ['amt'], noun: 'expenses'});
+  return crumbs([['Files'], ['Contractors', '#/contractors'], [name]]) + `<h1>${esc(name)}</h1><p class="sub">Payments from the Sold plots sheet, plus site expenses tagged with this name. The two lists may contain the same payment twice.</p>
+  <div class="split"><div><h2 style="font-size:15px;margin:0 0 8px">Ledger</h2>${l.html}<h2 style="font-size:15px;margin:18px 0 8px">Site expenses</h2>${e.html}</div><div>${dropzone('contractor/' + name, 'Bills & payment proofs')}</div></div>`;
+};
+
+// ---------- Site expenses ----------
+const CONTRACTOR_TAGS = /khod|anil|arun|nikunj|mohmmad|mohammad|mohamand|mahesh/i;
+const expTags = e => (e.type || '').split(',').map(s => s.trim()).filter(Boolean);
+const expCats = e => { const c = expTags(e).filter(t => !CONTRACTOR_TAGS.test(t)).map(t => t.replace(/conytractor/i, 'Contractor')); return c.length ? c : []; };
+const expWho = e => expTags(e).filter(t => CONTRACTOR_TAGS.test(t));
+const expFor = e => { const f = (e.for || '').toLowerCase(); return f.includes('plot') && f.includes('villa') ? 'Both' : f.includes('villa') ? 'Villas' : f.includes('plot') ? 'Plots' : null; };
+const expMethod = e => { const m = (e.method || '').toLowerCase(); return m === 'cash' ? 'Cash' : m === 'online' ? 'Online' : m ? e.method : null; };
+V.expenses = () => {
+  const t = tbl('expenses', [
+    {k: 'sr', label: 'Sr.', type: 'num', get: e => e.sr}, {k: 'date', label: 'Date', type: 'date', get: e => e.date, cell: e => ed('expenses', e, 'date', 'date')},
+    {k: 'part', label: 'Particulars', get: e => e.particulars, cell: e => ed('expenses', e, 'particulars')},
+    {k: 'for', label: 'For', get: expFor, cell: e => ed('expenses', e, 'for', 'select', 'forWhat', val(expFor(e)))},
+    {k: 'type', label: 'Type', get: e => expCats(e).join(', '), multi: expCats, cell: e => ed('expenses', e, 'type', 'text', '', val(expCats(e).join(', ')))},
+    {k: 'who', label: 'Contractor', get: e => expWho(e).join(', '), multi: expWho},
+    {k: 'method', label: 'Paid by', get: expMethod, cell: e => ed('expenses', e, 'method', 'select', 'method', val(expMethod(e)))},
+    {k: 'rem', label: 'Remarks', get: e => e.remarks, cell: e => ed('expenses', e, 'remarks')},
+    {k: 'amt', label: 'Amount', type: 'money', get: e => e.amount, cell: e => ed('expenses', e, 'amount', 'money')}], D.expenses, {totals: ['amt'], noun: 'expenses', order: (a, b) => a.sr - b.sr});
+  const S = t.shown, sum = a => a.reduce((s, e) => s + (e.amount || 0), 0);
+  const byCat = {}; S.forEach(e => { const c = expCats(e); const k = c.length > 1 ? 'Several types' : c[0] || 'Not categorised'; byCat[k] = (byCat[k] || 0) + (e.amount || 0); });
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]); const max = cats.length ? cats[0][1] : 1;
+  return crumbs([['Files'], ['Site expenses']]) + `<div class="row" style="justify-content:space-between"><h1>Site expenses</h1><button class="btn primary" data-add="expense">+ Add expense</button></div><p class="sub">Every row of the Nal Village expense sheet. Totals and the chart follow the column filters.</p>
+  ${showAdd === 'expense' ? addExpenseForm() : ''}
+  <div class="stats"><div class="stat"><small>Total shown</small><div>${inr(sum(S))}</div></div><div class="stat"><small>Plots</small><div>${inr(sum(S.filter(e => expFor(e) === 'Plots')))}</div></div><div class="stat"><small>Villas</small><div>${inr(sum(S.filter(e => expFor(e) === 'Villas')))}</div></div><div class="stat"><small>Entries</small><div>${S.length}</div></div></div>
+  <div class="card"><h2>By type of expense</h2><div class="bars">${cats.map(([k, v]) => `<div class="bar" style="cursor:default"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${(v / max * 100).toFixed(1)}%"></div></div><span class="num" style="text-align:right">${inr(v)}</span></div>`).join('')}</div></div>
+  ${t.html}${dropzone('expenses', 'Expense bills')}`;
+};
+const addExpenseForm = () => `<div class="card"><h2>New site expense</h2><div class="addform">
+  <label>Date<input type="date" id="ne_date" value="${new Date().toISOString().slice(0, 10)}"></label><label>Particulars<input id="ne_part"></label>
+  <label>For<select id="ne_for">${OPTS.forWhat.map(x => `<option>${x}</option>`).join('')}</select></label>
+  <label>Type<select id="ne_type">${['Material Exp', 'Labour Exp', 'Machinery Exp', 'Sub Contractor Pay', 'Electricity Exp', 'Diesel & Petrol Exp', 'Water Exp', 'Plumbing Exp', 'Site Sillak', 'LandOwner Advance Pay', 'Other'].map(x => `<option>${x}</option>`).join('')}</select></label>
+  <label>Contractor<select id="ne_con"><option value="">None</option>${D.contractors.map(c => `<option>${esc(c.name)}</option>`).join('')}</select></label>
+  <label>Amount (₹)<input type="number" id="ne_amt"></label><label>Paid by<select id="ne_method">${OPTS.method.map(x => `<option>${x}</option>`).join('')}</select></label>
+  <div class="row"><button class="btn primary" data-save="expense">Save expense</button><button class="btn" data-add="">Cancel</button></div></div><div class="err" id="ne_err"></div></div>`;
+
+// ---------- Incentives ----------
+V.incentives = () => {
+  const t = tbl('incentives', [
+    {k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'by', label: 'Agent', get: x => x.by, multi: x => agentsOf(x.by), cell: x => ed('incentives', x, 'by', 'select', 'agents')},
+    {k: 'client', label: 'Client', get: x => x.client, cell: x => ed('incentives', x, 'client')}, {k: 'plot', label: 'Plot', get: x => x.plot, cell: x => ed('incentives', x, 'plot')},
+    {k: 'date', label: 'Booked', type: 'date', get: x => x.bookingDate, cell: x => ed('incentives', x, 'bookingDate', 'date')},
+    {k: 'size', label: 'Size', type: 'num', get: x => x.size, cell: x => ed('incentives', x, 'size', 'number')},
+    {k: 'sell', label: 'Sold at', type: 'money', get: x => x.sellAmount, cell: x => ed('incentives', x, 'sellAmount', 'money')},
+    {k: 'rate', label: 'Rate /sq yd', type: 'money', get: x => x.actualRate},
+    {k: 'type', label: 'Type', get: x => x.type, cell: x => ed('incentives', x, 'type', 'select', 'incType')},
+    {k: 'slab', label: 'Slab', type: 'money', get: x => x.slab, cell: x => ed('incentives', x, 'slab', 'money')},
+    {k: 'adv', label: 'Advance', type: 'money', get: x => x.advance, cell: x => ed('incentives', x, 'advance', 'money')},
+    {k: 'final', label: 'Final', type: 'money', get: x => x.final, cell: x => `<b>${ed('incentives', x, 'final', 'money')}</b>`},
+    {k: 'pend', label: 'Pending', type: 'money', get: x => x.pending, cell: x => ed('incentives', x, 'pending', 'money')}], D.incentives, {totals: ['final', 'pend'], noun: 'rows'});
+  const bk = D.bookings.filter(b => b.incentiveStatus || b.incentiveReleased || b.incentivePending);
+  const agents = {}; bk.forEach(b => { const a = b.by || 'Not marked'; const g = agents[a] = agents[a] || {name: a, n: 0, rel: 0, pend: 0}; g.n++; g.rel += b.incentiveReleased || 0; g.pend += b.incentivePending || 0; });
+  const a = tbl('incentive-agents', [{k: 'sr', label: 'Sr.', type: 'num', get: g => Object.values(agents).indexOf(g) + 1}, {k: 'name', label: 'Agent', get: g => g.name},
+    {k: 'n', label: 'Bookings', type: 'num', get: g => g.n}, {k: 'rel', label: 'Released', type: 'money', get: g => g.rel}, {k: 'pend', label: 'Pending', type: 'money', get: g => g.pend}],
+    Object.values(agents).sort((x, y) => y.n - x.n), {totals: ['rel', 'pend'], noun: 'agents'});
+  return crumbs([['Files'], ['Incentives']]) + `<h1>Incentives</h1><p class="sub">From the Incentive Calculation sheet and the incentive columns of the booking list. Standard rate ₹5,750 /sq yd.</p>
+  <h2 style="font-size:15px;margin:0 0 8px">Calculation</h2>${t.html}<h2 style="font-size:15px;margin:18px 0 8px">By agent (booking list)</h2>${a.html}`;
+};
+
+// ---------- Edit history ----------
+const FIELD_LABEL = f => ({by: 'agent', fu1Date: 'follow-up 1 date', fu1Note: 'follow-up 1 note', fu2Date: 'follow-up 2 date', fu2Note: 'follow-up 2 note', fu3Date: 'follow-up 3 date', fu3Note: 'follow-up 3 note', fu4Date: 'follow-up 4 date', fu4Note: 'follow-up 4 note', dpAmount: 'down payment', finalAmount: 'finalised amount'}[f] || f.replace(/([A-Z])/g, ' $1').toLowerCase());
+let confirmReset = false;
+V.history = () => {
+  const E = store.edits.map((e, i) => ({...e, i, sr: i + 1}));
+  const t = tbl('history', [{k: 'sr', label: 'Sr.', type: 'num', get: e => e.sr}, {k: 'at', label: 'When', type: 'date', get: e => e.at.slice(0, 10), cell: e => `<span style="white-space:nowrap">${new Date(e.at).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</span>`},
+    {k: 'user', label: 'By', get: e => e.user, cell: e => `${esc(e.user || '')} <span class="muted">· ${esc(e.role || '')}</span>`}, {k: 'label', label: 'Record', get: e => e.label}, {k: 'field', label: 'Field', get: e => FIELD_LABEL(e.field)},
+    {k: 'old', label: 'From', get: e => e.old == null ? null : String(e.old)}, {k: 'new', label: 'To', get: e => e.new == null ? null : String(e.new), cell: e => `<b>${val(e.new)}</b>`},
+    {k: 'act', label: '', nofilter: true, get: () => null, cell: e => e.undoOf ? '<span class="muted">undo</span>' : e.undone ? '<span class="muted">undone</span>' : `<button class="btn small" data-undo="${e.i}">Undo</button>`}], E, {noun: 'changes', order: (a, b) => b.sr - a.sr});
+  const FL = {hold: 'Hold taken', book: 'Plot booked', pay: 'Payment added', lapse: 'Hold lapsed', visit: 'Site visit added', expense: 'Expense added'};
+  const steps = store.flows.length ? `<h2 style="font-size:15px;margin:22px 0 8px">Holds, bookings and payments</h2><div class="card" style="padding:6px 14px">${[...store.flows].reverse().map(f => { const c = clientById[f.cid]; const b = f.bid && bookingById[f.bid]; return `<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px"><b>${FL[f.type]}</b> · ${f.type === 'visit' ? esc(f.name || '') : f.type === 'expense' ? esc(f.particulars || '') : ''}${c ? `<a data-go="#/client/${c.id}" style="cursor:pointer;color:var(--accent)">${esc(c.name)}</a>` : ''}${b || f.plot ? ' · plot ' + esc((b && b.plot) || f.plot) : ''}${f.amount ? ' · ' + inr(f.amount) : ''}${f.final ? ' · final ' + inr(f.final) : ''} <span class="muted">· ${esc(f.user || '')} (${esc(f.role)}) · ${new Date(f.at).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</span></div>`; }).join('')}</div>` : '';
+  return crumbs([['Admin'], ['Edit history']]) + `<h1>Edit history</h1><p class="sub">Every change, who made it and when.</p>${t.html}${steps}`;
+};
+
+// ---------- Users ----------
+let USERS = null, usersLoading = false;
+function loadUsers() { if (usersLoading) return; usersLoading = true; api('/api/users').then(r => { USERS = r.users; usersLoading = false; render(); }).catch(e => { usersLoading = false; toast(e.message); }); }
+V.users = () => {
+  if (ME.role === 'Agent') return '<h1>Users</h1><p class="muted">Only Admin or Super admin can manage users.</p>';
+  if (!USERS) { loadUsers(); return crumbs([['Admin'], ['Users']]) + '<h1>Users</h1><p class="muted">Loading…</p>'; }
+  const t = tbl('users', [
+    {k: 'name', label: 'Name', get: u => u.name, cell: u => `<b>${esc(u.name)}</b>${u.id === ME.id ? ' <span class="muted">(you)</span>' : ''}`},
+    {k: 'username', label: 'Username', get: u => u.username},
+    {k: 'role', label: 'Role', get: u => u.role, order: ['Super admin', 'Admin', 'Agent']},
+    {k: 'active', label: 'Status', get: u => u.active ? 'Active' : 'Switched off', cell: u => u.active ? '<span class="badge b-sold">Active</span>' : '<span class="badge b-lapsed">Switched off</span>'},
+    {k: 'last', label: 'Last sign-in', type: 'date', get: u => u.last_login ? u.last_login.slice(0, 10) : null},
+    {k: 'act', label: '', nofilter: true, get: () => null, cell: u => (u.role === 'Super admin' && ME.role !== 'Super admin') ? '' : `<button class="btn small" data-uedit="${u.id}">Edit</button>`}
+  ], USERS, {noun: 'users'});
+  return crumbs([['Admin'], ['Users']]) + `<div class="row" style="justify-content:space-between"><h1>Users</h1><button class="btn primary" data-uadd>+ Add user</button></div>
+  <p class="sub">Agents can work on everything except changing a Converted visit or booking. Admins can also manage users. Only a Super admin can add or change another Super admin.</p>${t.html}`;
+};
+function userDlg(u) {
+  const roles = ME.role === 'Super admin' ? ['Agent', 'Admin', 'Super admin'] : ['Agent', 'Admin'];
+  const self = u && u.id === ME.id;
+  openDlg(u ? 'Edit user' : 'Add user', u ? esc(u.username) : 'They sign in with this username and password', `
+    <label>Name *<input id="u_name" value="${esc(u ? u.name : '')}"></label>
+    ${u ? '' : '<label>Username *<input id="u_user" autocapitalize="none" placeholder="e.g. lakshit"></label>'}
+    <div class="g2"><label>Role${self ? ' <span class="muted">(you cannot change your own role)</span>' : ''}<select id="u_role"${self ? ' disabled' : ''}>${roles.map(r => `<option ${u && u.role === r ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+    ${u ? `<label>Status<select id="u_active"${self ? ' disabled' : ''}><option value="1" ${u.active ? 'selected' : ''}>Active</option><option value="0" ${!u.active ? 'selected' : ''}>Switched off (cannot sign in)</option></select></label>` : ''}</div>
+    <label>${u ? 'New password <span class="muted">(leave empty to keep the current one)</span>' : 'Password * <span class="muted">(at least 6 characters)</span>'}<input id="u_pass" type="text" autocomplete="off"></label>`, u ? 'Save' : 'Add user', () => {
+    const body = {name: $('#u_name').value.trim(), role: $('#u_role').value};
+    const pw = $('#u_pass').value; if (pw) body.password = pw;
+    if (u) { if (!self) body.active = $('#u_active').value === '1'; if (self) delete body.role; }
+    else { body.username = $('#u_user').value.trim(); }
+    const btn = $('[data-dlgok]'); btn.disabled = true;
+    api(u ? '/api/users/' + u.id : '/api/users', {method: u ? 'PATCH' : 'POST', body}).then(() => {
+      closeDlg(); toast(u ? 'User updated' : 'User added'); if (self) { ME.name = body.name; renderWho(); } USERS = null; render();
+    }).catch(e => { btn.disabled = false; $('#dlg_err').textContent = e.message; });
+  });
+}
+function myPasswordDlg() {
+  openDlg('Change my password', esc(ME.name), `<label>Current password<input id="p_cur" type="password" autocomplete="current-password"></label>
+    <label>New password <span class="muted">(at least 6 characters)</span><input id="p_new" type="password" autocomplete="new-password"></label>`, 'Change password', () => {
+    const btn = $('[data-dlgok]'); btn.disabled = true;
+    api('/api/password', {body: {current: $('#p_cur').value, password: $('#p_new').value}}).then(() => { closeDlg(); toast('Password changed'); })
+      .catch(e => { btn.disabled = false; $('#dlg_err').textContent = e.message; });
+  });
+}
+
+// ---------- Data check ----------
+V.check = () => {
+  const S = D.summary; const un = D.payments.filter(p => !p.clients.length);
+  return crumbs([['Admin'], ['Data check']]) + `<h1>Data check</h1><p class="sub">How well your sheets loaded and linked together.</p>
+  <div class="stats">${[['Site visits', D.visits.length], ['Plots', Object.keys(D.plots).length], ['Client folders', D.clients.length], ['Booking rows', D.bookings.length], ['Payments', D.payments.length], ['Payments linked', D.payments.length - un.length], ['Site expenses', D.expenses.length]].map(([k, v]) => `<div class="stat"><small>${k}</small><div>${v}</div></div>`).join('')}</div>
+  <div class="card"><h2>Fixed while loading</h2><ul style="margin:0;padding-left:18px;color:var(--ink2)"><li>Dates that Excel had read with day and month swapped were corrected.</li><li>Phone numbers stored as numbers were turned back into 10-digit numbers.</li><li>Agent names written in different ways were merged (for example LAKSHIT, Lakhshit and Lakshit).</li><li>"Done" in the visit list is shown as "Converted".</li></ul></div>
+  <h2 style="font-size:15px;margin:0 0 8px">${un.length} payments not linked to a client</h2>
+  ${tbl('unlinked', [{k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date}, {k: 'text', label: 'Entry in sheet', get: p => p.text}, {k: 'amt', label: 'Amount', type: 'money', get: p => p.amount}], un, {totals: ['amt'], totalIf: received, noun: 'payments'}).html}
+  ${S.registerPlotsNotInPlotList.length ? `<div class="card"><h2>Plot numbers in the registers that are not in the Plot List</h2><p class="muted" style="margin:0">${S.registerPlotsNotInPlotList.map(esc).join(', ')}</p></div>` : ''}`;
+};
+
+// ---------- router ----------
+function render() {
+  const parts = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  const [v, a, b] = parts; let html, nav = v || 'visits';
+  if (!v || v === 'visits') { html = V.visits(); nav = 'visits'; }
+  else if (v === 'visit') { html = V.visit(a); nav = 'visits'; }
+  else if (v === 'clients') html = V.clients();
+  else if (v === 'client') { html = V.client(a); nav = 'clients'; }
+  else if (v === 'plots') html = V.plots();
+  else if (v === 'plot') { html = V.plot(a); nav = 'plots'; }
+  else if (v === 'landowners') html = V.landowners();
+  else if (v === 'partner') html = V.partner();
+  else if (v === 'contractors') html = V.contractors();
+  else if (v === 'contractor') { html = V.contractor(a); nav = 'contractors'; }
+  else if (v === 'expenses') html = V.expenses();
+  else if (v === 'users') html = V.users();
+  else if (v === 'incentives') html = V.incentives();
+  else if (v === 'history') html = V.history();
+  else if (v === 'check') html = V.check();
+  else html = V.visits();
+  renderNav(nav);
+  const active = document.activeElement; const restore = active && active.dataset && active.dataset.f ? [active.dataset.f, active.selectionStart] : null;
+  $('#view').innerHTML = html; addPencils($('#view'));
+  if (restore) { const el = document.querySelector(`[data-f="${restore[0]}"]`); if (el) { el.focus(); try { el.setSelectionRange(restore[1], restore[1]); } catch (x) {} } }
+}
+document.addEventListener('click', e => {
+  const t = e.target;
+  const pick = t.closest('[data-pick]'); if (pick) { document.querySelector(`[data-input="${CSS.escape(pick.dataset.pick)}"]`).click(); return; }
+  const op = t.closest('[data-open]');
+  if (op) { const [k, i] = op.dataset.open.split('|'); const f = uploads[k][+i];
+    const inner = /^(jpg|jpeg|png|webp)$/.test(f.ext) ? `<img src="${f.url}" alt="">` : f.ext === 'pdf' ? `<iframe src="${f.url}"></iframe>` : `<div style="flex:1;display:grid;place-items:center" class="muted">No preview for .${esc(f.ext)} files. <a href="${f.url}" download="${esc(f.name)}" style="color:var(--accent)">Download</a></div>`;
+    $('#modal').innerHTML = `<div class="preview" data-close><div class="box"><div class="bar2"><b>${esc(f.name)}</b><button data-close aria-label="Close">×</button></div>${inner}</div></div>`; return; }
+  if (t.matches('[data-close]')) { $('#modal').innerHTML = ''; return; }
+  const fb = t.closest('.fbtn'); if (fb) { if (pop && pop.key + '|' + pop.ck === fb.dataset.cf) closePop(); else openPop(fb); return; }
+  const pa = t.closest('[data-pop]'); if (pa) { popAction(pa.dataset.pop); return; }
+  if (pop && !t.closest('.pop')) { closePop(); return; }
+  const cc = t.closest('[data-cfclear]'); if (cc) { const s = CF[cc.dataset.cfclear]; s.f = {}; s.sort = null; render(); return; }
+  const cm = t.closest('[data-cfmore]'); if (cm) { CF[cm.dataset.cfmore].limit += 200; render(); return; }
+  const hl = t.closest('[data-hl]'); if (hl) { const k = hl.dataset.hl; if (!k) plotView.hl.clear(); else if (plotView.hl.has(k)) plotView.hl.delete(k); else plotView.hl.add(k); render(); return; }
+  const fl = t.closest('[data-flow]'); if (fl) { flowDlg(fl.dataset); return; }
+  const ph = t.closest('[data-phase]'); if (ph) { const k = ph.dataset.phase, o = k === 'after' ? 'before' : 'after'; plotView[k] = !plotView[k]; if (!plotView[k] && !plotView[o]) plotView[o] = true; render(); return; }
+  const cs = t.closest('[data-csel]'); if (cs) { clientSel[cs.dataset.cid] = cs.dataset.csel; render(); return; }
+  const pv = t.closest('[data-pv]'); if (pv) { plotView.mode = pv.dataset.pv; render(); return; }
+  if (t.closest('[data-addvisit]')) { openAddVisit(); return; }
+  const add = t.closest('[data-add]'); if (add) { showAdd = add.dataset.add || null; render(); return; }
+  const sv = t.closest('[data-save]'); if (sv) { saveNew(sv.dataset.save); return; }
+  const un = t.closest('[data-undo]'); if (un) { undo(+un.dataset.undo); return; }
+  if (t.closest('[data-logout]')) { api('/api/logout', {body: {}}).finally(() => location.reload()); return; }
+  if (t.closest('[data-mypass]')) { myPasswordDlg(); return; }
+  if (t.closest('[data-uadd]')) { userDlg(null); return; }
+  const ue = t.closest('[data-uedit]'); if (ue) { userDlg(USERS.find(u => u.id === +ue.dataset.uedit)); return; }
+  const go = t.closest('[data-go]'); if (go) { location.hash = go.dataset.go; $('#results').hidden = true; }
+});
+document.addEventListener('change', e => {
+  if (e.target.dataset && e.target.dataset.input) addFiles(e.target.dataset.input, e.target.files);
+});
+['dragover', 'dragleave', 'drop'].forEach(t => document.addEventListener(t, e => {
+  const z = e.target.closest && e.target.closest('[data-drop]'); if (!z) return;
+  e.preventDefault(); z.classList.toggle('over', t === 'dragover'); if (t === 'drop') addFiles(z.dataset.drop, e.dataTransfer.files);
+}));
+function undo(i) {
+  const e = store.edits[i]; if (!e || e.undone) return; const o = IDX[e.coll][e.id];
+  if (e.coll === 'visits' && e.field === 'status' && ROLE() === 'Agent' && (e.old === 'Converted' || /done|convert/i.test(e.old || '') || /convert/i.test(e.new || ''))) { toast('Only Admin or Super admin can undo a Converted change.'); return; }
+  if (!o) { toast('This record no longer exists.'); return; }
+  const ops = [{op: 'patch', coll: e.coll, id: e.id, field: e.field, value: e.old, label: e.label + ' (undo)', undoOf: e.eid}];
+  if (e.coll === 'visits' && /^fu\d/.test(e.field)) { const copy = JSON.parse(JSON.stringify(o)); setF(e.coll, copy, e.field, e.old); ops.push({op: 'patch', coll: 'visits', id: e.id, field: 'followups', value: copy.followups, silent: true}); }
+  sendOps(ops).then(() => { setF(e.coll, o, e.field, e.old); e.undone = true; editedSet.delete(e.coll + '|' + e.id + '|' + e.field); render(); toast('Change undone'); }).catch(err => toast(err.message));
+}
+function saveNew(kind) {
+  if (kind === 'visit') {
+    const name = $('#nv_name').value.trim(), phone = $('#nv_phone').value.replace(/\D/g, '');
+    const err = m => { $('#dlg_err').textContent = m; };
+    if (!name) return err('Enter the visitor name.');
+    if (phone && phone.length !== 10) return err('Phone number should have 10 digits.');
+    if (!$('#nv_date').value) return err('Enter the visit date.');
+    const st = ($('#dlg .chips[data-group=status] .chip.on') || {}).dataset; const tx = id => $(id).value.trim() || null;
+    const v = {id: 'N' + Date.now(), added: true, row: 0, date: $('#nv_date').value, name, phone: phone || null, by: $('#nv_by').value, status: st ? st.chip : 'Follow up', extra: tx('#nv_extra'), remark: tx('#nv_remark'), followups: null, client: null, source: 'Added in CRM', sr: maxSr(D.visits) + 1};
+    for (let i = 1; i <= 4; i++) { v['fu' + i + 'Date'] = null; v['fu' + i + 'Note'] = null; }
+    v.fu1Date = $('#nv_fu1d').value || null; v.fu1Note = tx('#nv_fu1n');
+    const deal = ($('#dlg .chips[data-group=deal] .chip.on') || {dataset: {}}).dataset.chip; const plot = $('#nv_plot').value; const nn = idn => $(idn).value === '' ? null : Number($(idn).value);
+    if (deal !== 'none' && !plot) return err('Choose the plot.');
+    if (deal === 'book' && !nn('#nv_final')) return err('Enter the final amount of the plot.');
+    const dv = {hamt: nn('#nv_hamt'), hmode: $('#nv_hmode').value, final: nn('#nv_final'), bamt: nn('#nv_bamt'), bmode: $('#nv_bmode').value};
+    closeDlg();
+    if (deal !== 'none') {
+      const s = stamp(); const match = phone ? D.clients.find(x => x.phone === phone) : null;
+      const h = {type: 'hold', at: new Date().toISOString(), role: ROLE(), vid: v.id, cid: match ? match.id : 'CN' + s, csr: match ? match.sr : maxSr(D.clients) + 1, name: match ? match.name : name, phone: phone || null,
+        bid: 'BN' + s, bsr: maxSr(D.bookings) + 1, pid: 'PH' + s, psr: maxSr(D.payments) + 1, plot, amount: deal === 'hold' ? dv.hamt : null, date: v.date, mode: dv.hmode, by: v.by, visitDate: v.date, note: null};
+      const sn = snap(); D.visits.unshift(v); reindex();
+      const steps = [{type: 'visit', vid: v.id, name: v.name, phone: v.phone}, h];
+      applyFlow(h);
+      if (deal === 'book') { const f = {type: 'book', at: new Date().toISOString(), role: ROLE(), bid: h.bid, cid: h.cid, vid: v.id, final: dv.final, amount: dv.bamt, date: v.date, mode: dv.bmode, loan: 'No', loanAmount: null, emi: null, pid: 'PB' + s, psr: maxSr(D.payments) + 1};
+        applyFlow(f); steps.push(f); }
+      showAdd = null; commit(sn, steps, deal === 'book' ? 'Visit saved and plot ' + plot + ' booked' : 'Visit saved and plot ' + plot + ' put on hold', '#/client/' + h.cid); return;
+    }
+    const pcn = phoneCount(); const msg = phone && pcn[phone] ? 'Saved. This phone number already has ' + pcn[phone] + ' visit(s).' : 'Visit saved';
+    const sn = snap(); D.visits.unshift(v); showAdd = null; commit(sn, [{type: 'visit', vid: v.id, name: v.name, phone: v.phone}], msg); return;
+  } else {
+    const amt = Number($('#ne_amt').value); const part = $('#ne_part').value.trim();
+    if (!part) { $('#ne_err').textContent = 'Enter what the expense was for.'; return; }
+    if (!amt) { $('#ne_err').textContent = 'Enter the amount.'; return; }
+    const con = $('#ne_con').value; const type = $('#ne_type').value + (con ? ', ' + con : '');
+    const e = {id: 'E' + Date.now(), added: true, row: 0, date: $('#ne_date').value || null, particulars: part, for: $('#ne_for').value, type, amount: amt, method: $('#ne_method').value, remarks: null, contractor: con || null, sr: maxSr(D.expenses) + 1};
+    const sn = snap(); D.expenses.push(e); if (con) { const c = D.contractors.find(x => x.name === con); if (c) c.expenses.push(e); }
+    showAdd = null; commit(sn, [{type: 'expense', eid: e.id, particulars: part, amount: amt}], 'Expense saved'); return;
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && pop) closePop(); if (e.key === 'Enter' && pop && e.target.closest && e.target.closest('.pop')) popAction('ok'); });
+window.addEventListener('hashchange', () => { closePop(); closeDlg(); showAdd = null; confirmReset = false; render(); window.scrollTo(0, 0); });
+
+// ---------- global search ----------
+const q = $('#q'), res = $('#results');
+q.addEventListener('input', () => {
+  const s = q.value.trim().toLowerCase(); if (!s) { res.hidden = true; return; }
+  const digits = s.replace(/\D/g, ''); const hits = [];
+  if (D.plots[s]) hits.push([`Plot ${s}`, plotClass(D.plots[s])[1], '#/plot/' + s]);
+  D.clients.forEach(c => { if (c.name.toLowerCase().includes(s) || c.otherNames.some(n => n.toLowerCase().includes(s)) || (digits.length >= 4 && (c.phone || '').includes(digits)) || c.plots.includes(s)) hits.push([c.name, (c.plots.length ? 'Plot ' + c.plots.filter(p => D.plots[p]).join(', ') : '') + (c.phone ? ' · ' + c.phone : ''), '#/client/' + c.id]); });
+  D.visits.forEach(v => { if (!v.client && ((v.name || '').toLowerCase().includes(s) || (digits.length >= 4 && (v.phone || '').includes(digits)))) hits.push([v.name || 'Visitor', 'Site visit · Sr. ' + v.sr + ' · ' + (v.phone || ''), '#/visit/' + v.id]); });
+  res.innerHTML = hits.slice(0, 12).map(h => `<a data-go="${h[2]}"><b>${esc(h[0])}</b><small>${esc(h[1])}</small></a>`).join('') || '<div class="muted" style="padding:10px 12px">No matches</div>';
+  res.hidden = false;
+});
+document.addEventListener('click', e => { if (!e.target.closest('.search')) res.hidden = true; else if (e.target.closest('[data-go]')) { res.hidden = true; q.value = ''; } });
+renderWho();
+render();
+if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') window.__dbg = s => eval(s); // used only by local tests
+setInterval(checkVersion, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkVersion(); });
+}
+</script>
+<script>
+// ---------- talking to the server ----------
+async function api(path, opts = {}) {
+  let r;
+  try { r = await fetch(path, {method: opts.method || (opts.body ? 'POST' : 'GET'), headers: opts.body ? {'content-type': 'application/json'} : {}, body: opts.body ? JSON.stringify(opts.body) : undefined, credentials: 'same-origin'}); }
+  catch (e) { throw new Error('No internet connection, or the server could not be reached. Nothing was saved.'); }
+  let j = {}; try { j = await r.json(); } catch (e) {}
+  if (r.status === 401 && !opts.quiet) { showLogin(false, j.error); throw new Error(j.error || 'Please sign in again.'); }
+  if (!r.ok) throw new Error(j.error || 'Something went wrong. Please try again.');
+  return j;
+}
+const escL = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+function showLogin(setup, msg) {
+  const L = document.getElementById('login'); const b = document.getElementById('bootMsg'); if (b) b.remove();
+  document.getElementById('app').hidden = true; L.hidden = false;
+  L.innerHTML = `<form id="loginForm" autocomplete="on">
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><div class="brand-mark">T</div><b>Tatva CRM</b></div>
+    <h1>${setup ? 'First-time setup' : 'Sign in'}</h1>
+    <p>${setup ? 'Create the first Super admin. You can add the rest of the team after this.' : 'Use the username and password your admin gave you.'}</p>
+    ${setup ? '<label>Your name<input name="name" required autocomplete="name"></label>' : ''}
+    <label>Username<input name="username" required autocomplete="username" autocapitalize="none"></label>
+    <label>Password<input name="password" type="password" required autocomplete="${setup ? 'new-password' : 'current-password'}"></label>
+    <div class="err" id="loginErr">${escL(msg && !setup ? msg : '')}</div>
+    <button class="btn primary" type="submit">${setup ? 'Create Super admin' : 'Sign in'}</button></form>`;
+  const f = document.getElementById('loginForm');
+  f.addEventListener('submit', async e => {
+    e.preventDefault(); const fd = Object.fromEntries(new FormData(f)); const btn = f.querySelector('button'); btn.disabled = true;
+    try { await api(setup ? '/api/setup' : '/api/login', {body: fd, quiet: true}); location.reload(); }
+    catch (err) { document.getElementById('loginErr').textContent = err.message; btn.disabled = false; }
+  });
+  f.querySelector('input').focus();
+}
+function showImport(user) {
+  const L = document.getElementById('login'); const bm = document.getElementById('bootMsg'); if (bm) bm.remove(); L.hidden = false;
+  if (user.role !== 'Super admin') { L.innerHTML = `<form><h1>Almost ready</h1><p>The sheet data has not been loaded yet. Ask the Super admin to load it, then refresh this page.</p><button class="btn" type="button" onclick="location.reload()">Refresh</button></form>`; return; }
+  L.innerHTML = `<form id="impForm"><div style="display:flex;gap:10px;align-items:center;margin-bottom:6px"><div class="brand-mark">T</div><b>Tatva CRM</b></div>
+    <h1>Load your sheet data</h1><p>One last step, done only once. Choose the file <b>tatva-data.json</b> (it is in your Downloads folder).</p>
+    <label>Data file<input type="file" id="impFile" accept=".json,application/json" required></label>
+    <div class="err" id="impErr"></div><button class="btn primary" type="submit">Load data</button></form>`;
+  document.getElementById('impForm').addEventListener('submit', async e => {
+    e.preventDefault(); const f = document.getElementById('impFile').files[0]; const btn = e.target.querySelector('button'); const er = document.getElementById('impErr');
+    if (!f) return; btn.disabled = true; btn.textContent = 'Loading…';
+    try { const records = JSON.parse(await f.text()); const r = await api('/api/import', {body: {records}}); btn.textContent = r.records + ' records loaded'; setTimeout(() => location.reload(), 800); }
+    catch (err) { er.textContent = err.message.includes('JSON') ? 'This is not the Tatva data file.' : err.message; btn.disabled = false; btn.textContent = 'Load data'; }
+  });
+}
+(async function boot() {
+  try {
+    const me = await api('/api/me', {quiet: true});
+    if (!me.user) return showLogin(me.setup);
+    const all = await api('/api/data');
+    if (all.empty) return showImport(me.user);
+    startApp(all.data, me.user, all);
+  } catch (e) { const b = document.getElementById('bootMsg'); if (b) b.textContent = e.message; }
+})();
+</script>
+</body>
+</html>
