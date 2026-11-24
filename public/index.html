@@ -634,7 +634,7 @@ function renderNav(cur) {
 }
 const V = {};
 const plotView = {mode: 'list', hl: new Set(), before: false, after: true};
-const listView = {visitsLapsed: false, clientsLapsed: false};
+const listView = {visitsLapsed: false, clientGroups: {Booked: true, 'On hold': true, Lapsed: false}};
 const clientSel = {};
 
 // ---------- Site visits ----------
@@ -792,11 +792,12 @@ V.clients = () => {
     {k: 'final', label: 'Final amount', type: 'money', nofilter: true, totalIf: c => clientStatus(c)[0] === 'Booked', get: clientFinal},
     {k: 'paid', label: 'Paid till now', type: 'money', nofilter: true, get: c => paidOf(clientPayments(c.id)) || null}
   ];
-  const isL = c => clientStatus(c)[0] === 'Lapsed'; const nL = D.clients.filter(isL).length;
-  const rows = listView.clientsLapsed ? D.clients : D.clients.filter(c => !isL(c));
+  const grp = c => { const s = clientStatus(c)[0]; return s === 'On hold' || s === 'Lapsed' ? s : 'Booked'; };
+  const G = ['Booked', 'On hold', 'Lapsed']; const n = Object.fromEntries(G.map(g => [g, D.clients.filter(c => grp(c) === g).length]));
+  const rows = D.clients.filter(c => listView.clientGroups[grp(c)]);
   const t = tbl('clients', cols, rows, {rowGo: c => '#/client/' + c.id, noun: 'clients', order: (a, b) => String(clientDate(b) || '').localeCompare(String(clientDate(a) || '')) || b.sr - a.sr, totals: ['final', 'paid']});
   return crumbs([['Files'], ['Clients']]) + `<h1>Clients</h1><p class="sub">One folder per client, newest first. "Date" is the client's latest hold or booking date. The Final amount total counts booked clients only. Paid till now leaves out returned cheques.</p>
-  <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="chip on" style="cursor:default">Booked & on hold <span class="muted">${D.clients.length - nL}</span></span><span class="chip${listView.clientsLapsed ? ' on' : ''}" data-lv="clientsLapsed" data-val="${listView.clientsLapsed ? '' : '1'}">+ Lapsed clients <span class="muted">${nL}</span></span></div>${t.html}`;
+  <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="muted" style="font-size:12.5px;margin-right:4px">Show</span>${G.map(g => `<span class="chip${listView.clientGroups[g] ? ' on' : ''}" data-cgroup="${g}">${g} <span class="muted">${n[g]}</span></span>`).join('')}</div>${t.html}`;
 };
 V.client = id => {
   const c = clientById[id]; if (!c) return '<p>Client not found.</p>';
@@ -1092,6 +1093,7 @@ document.addEventListener('click', e => {
   const cm = t.closest('[data-cfmore]'); if (cm) { CF[cm.dataset.cfmore].limit += 200; render(); return; }
   const hl = t.closest('[data-hl]'); if (hl) { const k = hl.dataset.hl; if (!k) plotView.hl.clear(); else if (plotView.hl.has(k)) plotView.hl.delete(k); else plotView.hl.add(k); render(); return; }
   const fl = t.closest('[data-flow]'); if (fl) { flowDlg(fl.dataset); return; }
+  const cg = t.closest('[data-cgroup]'); if (cg) { const G = listView.clientGroups, k = cg.dataset.cgroup; G[k] = !G[k]; if (!Object.values(G).some(Boolean)) G[k] = true; render(); return; }
   const lv = t.closest('[data-lv]'); if (lv) { listView[lv.dataset.lv] = !!lv.dataset.val; render(); return; }
   const ph = t.closest('[data-phase]'); if (ph) { const k = ph.dataset.phase, o = k === 'after' ? 'before' : 'after'; plotView[k] = !plotView[k]; if (!plotView[k] && !plotView[o]) plotView[o] = true; render(); return; }
   const cs = t.closest('[data-csel]'); if (cs) { clientSel[cs.dataset.cid] = cs.dataset.csel; render(); return; }
