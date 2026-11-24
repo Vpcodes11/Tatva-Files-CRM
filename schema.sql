@@ -69,3 +69,21 @@ CREATE TABLE IF NOT EXISTS meta (
   value  TEXT
 );
 INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '0');
+
+-- Deleted records (Super admin). Every deleted record, and the state before of any record changed by the delete,
+-- is kept here so it can be restored from Admin → Deleted items.
+CREATE TABLE IF NOT EXISTS trash (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  grp         TEXT NOT NULL,              -- one delete action
+  coll        TEXT NOT NULL,
+  rec_id      TEXT NOT NULL,
+  kind        TEXT NOT NULL,              -- 'deleted' or 'before' (a record that the delete changed)
+  data        TEXT NOT NULL,
+  label       TEXT,
+  user_id     INTEGER,
+  user_name   TEXT,
+  at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  restored_at TEXT,
+  restored_by TEXT
+);
+CREATE INDEX IF NOT EXISTS trash_grp ON trash (grp);

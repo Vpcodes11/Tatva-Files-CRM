@@ -140,6 +140,9 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
 .stat small{color:var(--ink3);font-size:12px}.stat div{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.tmeta .exp{float:right;color:var(--ink3)}.tmeta .exp a{cursor:pointer;color:var(--accent);font-weight:600}
+.danger{color:var(--lapsed)!important;border-color:#e7c9c4!important}
+.dlg .df .left{margin-right:auto}
 .clip{display:inline-block;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--hold-bg);border-radius:8px;padding:8px 10px;margin:0 0 12px;font-size:13px}.acts span{flex:1;min-width:160px;color:var(--hold)}
 .note{font-size:12.5px;color:var(--ink2);background:var(--accent-bg);border-radius:8px;padding:9px 12px;margin-bottom:14px}
@@ -281,6 +284,11 @@ function reindex() {
 }
 reindex();
 const maxSr = arr => Math.max(0, ...arr.map(o => o.sr || 0));
+// Plots: TRPL plots and plots sold before TRPL each have their own Sr. series (1, 2, 3 …), in Plot List order.
+const isPrePlot = p => p.trpl === 'Before TRPL';
+const plotSr = new Map();
+[false, true].forEach(pre => Object.values(D.plots).filter(p => isPrePlot(p) === pre).sort((a, b) => (a.sr || 0) - (b.sr || 0)).forEach((p, i) => plotSr.set(p.no, i + 1)));
+const plotSrLabel = p => (isPrePlot(p) ? 'Before TRPL Sr. ' : 'TRPL Sr. ') + (plotSr.get(p.no) || '—');
 
 // ---------- hold → booking → payment steps (saved as a list of steps, replayed on load) ----------
 const newPay = (f, text, amount, mode, plots, cid) => ({id: f.pid, sr: f.psr, row: 0, added: true, month: null, date: f.date, text, amount, mode, note: f.note || null, plots, status: 'Received', clients: [cid]});
@@ -445,6 +453,7 @@ document.addEventListener('click', e => {
     if (t.closest('[data-dlgok]')) { e.stopPropagation(); if (dlgSave) dlgSave(); return; }
     const chip = t.closest('[data-chip]'); if (chip) { e.stopPropagation(); if (chip.parentNode.hasAttribute('data-multi')) chip.classList.toggle('on'); else chip.parentNode.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip)); if (chip.parentNode.dataset.group === 'deal') dealFields(); return; }
     const dg = t.closest('.dlg [data-go]'); if (dg) { e.stopPropagation(); closeDlg(); location.hash = dg.dataset.go; return; }
+    const dd = t.closest('[data-dlgdel]'); if (dd) { e.stopPropagation(); const [c, i] = dd.dataset.dlgdel.split('|'); closeDlg(); deleteDlg(c, i, c === 'visits' && location.hash.startsWith('#/visit/') ? '#/visits' : null); return; }
     if (t.closest('.dlg')) return;
   }
   const sp = t.closest('.pen'); if (!sp) return;
@@ -471,6 +480,9 @@ document.addEventListener('click', e => {
   });
   if (!fields.length) return;
   const recs = [...new Set(fields.map(x => describe(x.coll, x.o)))];
+  const one = [...new Set(fields.map(x => x.coll + '|' + x.id))];
+  const delBtn = canDelete() && one.length === 1 && DELETABLE.includes(fields[0].coll) && !(fields[0].coll === 'clients' && location.hash.startsWith('#/client/'))
+    ? `<button class="btn danger" type="button" data-dlgdel="${esc(one[0])}">Delete this ${fields[0].coll === 'visits' ? 'visit' : 'record'}</button>` : '';
   openDlg(esc(sp._title || 'Edit'), esc(recs.slice(0, 2).join(' · ')), `<div class="g2">${fields.map(x => x.html).join('')}</div>`, 'Save', () => {
     const changes = [];
     fields.forEach(x => {
@@ -492,6 +504,7 @@ document.addEventListener('click', e => {
       closeDlg(); render(); toast(changes.length === 1 ? 'Saved 1 change' : 'Saved ' + changes.length + ' changes');
     }).catch(e => { btn.disabled = false; btn.textContent = 'Save'; $('#dlg_err').textContent = e.message; });
   }, fields.length > 3);
+  if (delBtn) $('.dlg .df').insertAdjacentHTML('afterbegin', delBtn.replace('class="btn danger"', 'class="btn danger left"'));
 }, true);
 document.addEventListener('keydown', e => {
   if (!$('#dlg').firstChild) return;
@@ -556,6 +569,7 @@ function cmpBy(c) {
     return String(x).localeCompare(String(y), 'en', {numeric: true, sensitivity: 'base'}); };
 }
 const FUNNEL = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></svg>';
+let EXPORT_ALL = false;
 function tbl(key, cols, rows, opt = {}) {
   const st = CF[key] = CF[key] || {f: {}, sort: null, limit: opt.limit || 0};
   TABLES[key] = {cols, rows};
@@ -569,7 +583,9 @@ function tbl(key, cols, rows, opt = {}) {
     return `<th class="${c.type === 'num' || c.type === 'money' ? 'num' : ''}${c.k === 'sr' ? ' sr' : ''}"><span class="th">${esc(c.label)}${so}${c.nofilter ? '' : `<button class="fbtn${on ? ' on' : ''}" data-cf="${key}|${c.k}" title="Sort and filter">${FUNNEL}</button>`}</span></th>`; }).join('');
   const body = shown.slice(0, lim).map(r => `<tr${opt.rowGo ? ` class="click" data-go="${opt.rowGo(r)}"` : ''}>${cols.map(c => `<td class="${c.type === 'num' || c.type === 'money' ? 'num' : ''}${c.k === 'sr' ? ' sr' : ''}">${c.cell ? c.cell(r) : c.type === 'date' ? fd(c.get(r)) : c.type === 'money' ? inr(c.get(r)) : val(c.get(r))}</td>`).join('')}</tr>`).join('');
   const foot = opt.totals ? `<tfoot><tr>${cols.map((c, i) => `<td class="${c.type === 'money' ? 'num' : ''}">${i === 0 ? '' : opt.totals.includes(c.k) ? inr(shown.filter(c.totalIf || opt.totalIf || (() => true)).reduce((s, r) => s + (Number(c.get(r)) || 0), 0)) : i === 1 ? 'Total' : ''}</td>`).join('')}</tr></tfoot>` : '';
-  const meta = `<div class="tmeta">${anyF ? `Showing <b>${shown.length}</b> of ${rows.length} · <a data-cfclear="${key}">Clear filters and sort</a>` : `${rows.length} ${opt.noun || 'rows'}`}</div>`;
+  TABLES[key] = {cols, shown, rows: opt.order ? [...rows].sort(opt.order) : rows, title: opt.title};
+  const exp = canExport() ? `<span class="exp">Export ${anyF ? 'these ' + shown.length : ''}: <a data-exp="${key}" data-fmt="xlsx">Excel</a> · <a data-exp="${key}" data-fmt="csv">CSV</a></span>` : '';
+  const meta = `<div class="tmeta">${anyF ? `Showing <b>${shown.length}</b> of ${rows.length} · <a data-cfclear="${key}">Clear filters and sort</a>` : `${rows.length} ${opt.noun || 'rows'}`}${exp}</div>`;
   const more = shown.length > lim ? `<p style="padding:8px 10px;margin:0"><button class="btn small" data-cfmore="${key}">Show ${Math.min(200, shown.length - lim)} more</button> <span class="muted">${shown.length - lim} not shown</span></p>` : '';
   return {shown, html: `${meta}<div class="card tablecard"><div class="tscroll"><table><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${cols.length}" class="muted" style="padding:14px">No rows match these filters.</td></tr>`}</tbody>${foot}</table></div>${more}</div>`};
 }
@@ -630,7 +646,7 @@ function renderNav(cur) {
     ['landowners', 'Sold plots', 'land', D.landowners.length], ['partner', 'Land partner', 'hand'], ['contractors', 'Contractors', 'tool', D.contractors.length],
     ['expenses', 'Site expenses', 'coins', D.expenses.length], ['incentives', 'Incentives', 'award', D.incentives.length]];
   $('#nav').innerHTML = '<div class="navlabel">Files</div>' + NAV.map(([k, l, i, c]) => `<a class="${cur === k ? 'on' : ''}" data-go="#/${k}">${ico(i)}${esc(l)}${c != null ? `<span class="ct">${c}</span>` : ''}</a>`).join('') +
-    `<div class="navlabel">Admin</div>${ME.role !== 'Agent' ? `<a class="${cur === 'users' ? 'on' : ''}" data-go="#/users">${ico('users')}Users</a>` : ''}<a class="${cur === 'history' ? 'on' : ''}" data-go="#/history">${ico('clock')}Edit history<span class="ct">${store.edits.filter(e => !e.undone).length}</span></a><a class="${cur === 'check' ? 'on' : ''}" data-go="#/check">${ico('check')}Data check<span class="ct">${D.payments.filter(p => !p.clients.length).length}</span></a>`;
+    `<div class="navlabel">Admin</div>${ME.role !== 'Agent' ? `<a class="${cur === 'users' ? 'on' : ''}" data-go="#/users">${ico('users')}Users</a>` : ''}<a class="${cur === 'history' ? 'on' : ''}" data-go="#/history">${ico('clock')}Edit history<span class="ct">${store.edits.filter(e => !e.undone).length}</span></a><a class="${cur === 'check' ? 'on' : ''}" data-go="#/check">${ico('check')}Data check<span class="ct">${D.payments.filter(p => !p.clients.length).length}</span></a>${canDelete() ? `<a class="${cur === 'trash' ? 'on' : ''}" data-go="#/trash">${ico('clock')}Deleted items</a>` : ''}${canExport() ? `<a data-expall>${ico('check')}Export all to Excel</a>` : ''}`;
 }
 const V = {};
 const plotView = {mode: 'list', hl: new Set(), before: false, after: true};
@@ -654,7 +670,7 @@ V.visits = () => {
   ];
   const isLapsedVisit = v => { const c = v.client && clientById[v.client]; return !!c && clientStatus(c)[0] === 'Lapsed'; };
   const nLapsed = D.visits.filter(isLapsedVisit).length;
-  const rows = D.visits.filter(v => isLapsedVisit(v) === !!listView.visitsLapsed);
+  const rows = EXPORT_ALL ? D.visits : D.visits.filter(v => isLapsedVisit(v) === !!listView.visitsLapsed);
   const t = tbl('visits' + (listView.visitsLapsed ? '-lapsed' : ''), cols, rows, {rowGo: v => listView.visitsLapsed ? '#/client/' + v.client : '#/visit/' + v.id, limit: 200, noun: 'visits', order: (a, b) => b.sr - a.sr});
   return crumbs([['Files'], ['Site visits']]) + `<div class="row" style="justify-content:space-between"><h1>Site visits</h1><button class="btn primary" data-addvisit>+ Add visit</button></div>
   <p class="sub">Every visitor is registered here first. Use the ${FUNNEL} button in any column header to sort or filter, as in Google Sheets. A Converted visit is locked for agents.</p>
@@ -767,7 +783,7 @@ V.visit = id => {
   const s = vStatus(v); const c = v.client && clientById[v.client];
   const others = v.phone ? D.visits.filter(x => x.phone === v.phone && x.id !== v.id) : [];
   return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
-  <button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div><p class="sub">Sr. ${v.sr}</p>
+  <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">Sr. ${v.sr}</p>
   <div class="split"><div>
   <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark')]])}</div>
   ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
@@ -794,7 +810,7 @@ V.clients = () => {
   ];
   const grp = c => { const s = clientStatus(c)[0]; return s === 'On hold' || s === 'Lapsed' ? s : 'Booked'; };
   const G = ['Booked', 'On hold', 'Lapsed']; const n = Object.fromEntries(G.map(g => [g, D.clients.filter(c => grp(c) === g).length]));
-  const rows = D.clients.filter(c => listView.clientGroups[grp(c)]);
+  const rows = EXPORT_ALL ? D.clients : D.clients.filter(c => listView.clientGroups[grp(c)]);
   const t = tbl('clients', cols, rows, {rowGo: c => '#/client/' + c.id, noun: 'clients', order: (a, b) => String(clientDate(b) || '').localeCompare(String(clientDate(a) || '')) || b.sr - a.sr, totals: ['final', 'paid']});
   return crumbs([['Files'], ['Clients']]) + `<h1>Clients</h1><p class="sub">One folder per client, newest first. "Date" is the client's latest hold or booking date. The Final amount total counts booked clients only. Paid till now leaves out returned cheques.</p>
   <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="muted" style="font-size:12.5px;margin-right:4px">Show</span>${G.map(g => `<span class="chip${listView.clientGroups[g] ? ' on' : ''}" data-cgroup="${g}">${g} <span class="muted">${n[g]}</span></span>`).join('')}</div>${t.html}`;
@@ -833,7 +849,7 @@ V.client = id => {
       {k: 'amount', label: 'Amount', type: 'money', get: p => p.amount, cell: p => amtCell(p, ed('payments', p, 'amount', 'money'))}], shownPays, {totals: ['amount'], totalIf: received, noun: 'payments'}).html : `<p class="muted">No payments linked to this ${sel !== 'all' ? 'plot' : 'client'}.</p>`;
   const vs = D.visits.filter(x => x.client === id);
   return crumbs([['Files'], ['Clients', '#/clients'], [c.name]]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${ed('clients', c, 'name')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
-  <div class="row" style="gap:8px"><button class="btn" data-flow="hold" data-cid="${esc(id)}">+ Hold another plot</button><button class="btn primary" data-flow="pay" data-cid="${esc(id)}">+ Add payment</button></div></div>
+  <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="clients|${esc(id)}|#/clients">Delete folder</button>` : ''}<button class="btn" data-flow="hold" data-cid="${esc(id)}">+ Hold another plot</button><button class="btn primary" data-flow="pay" data-cid="${esc(id)}">+ Add payment</button></div></div>
   <p class="sub">Sr. ${c.sr} · ${ed('clients', c, 'phone')}${plots.length ? ' · Plot ' + plots.map(esc).join(', ') : ''}${b0.by ? ' · Agent: ' + esc(b0.by) : ''}</p>
   ${multi ? `<div class="row" style="gap:6px;margin:0 0 12px;flex-wrap:wrap"><span class="muted" style="font-size:12.5px;margin-right:4px">Show plot</span>${plots.map(pn => `<span class="chip${sel === pn ? ' on' : ''}" data-cid="${esc(id)}" data-csel="${esc(pn)}">Plot ${esc(pn)}</span>`).join('')}<span class="chip${sel === 'all' ? ' on' : ''}" data-cid="${esc(id)}" data-csel="all">All plots</span></div>` : ''}
   <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(128px,1fr))"><div class="stat"><small>Plot no.</small><div>${esc(H.no)}</div></div>
@@ -855,7 +871,7 @@ V.client = id => {
 V.plots = () => {
   const conv = new Set(D.bookings.filter(isConvertedBooking).map(b => b.plot));
   const cols = [
-    {k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr},
+    {k: 'sr', label: 'Sr.', type: 'num', get: p => plotSr.get(p.no), cell: p => `${plotSr.get(p.no) || ''}${plotView.before && plotView.after && isPrePlot(p) ? ' <span class="muted" style="font-size:11px">pre</span>' : ''}`},
     {k: 'no', label: 'Plot', type: 'num', get: p => parseInt(p.no) || null, cell: p => `<b>${esc(p.no)}</b>`},
     {k: 'status', label: 'Status', get: p => plotClass(p)[1], cell: p => ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${plotClass(p)[2]}">${plotClass(p)[1]}</span>`)},
     {k: 'area', label: 'Area (sq yd)', type: 'num', get: p => p.area, cell: p => ed('plots', p, 'area', 'number')},
@@ -865,7 +881,7 @@ V.plots = () => {
   ];
   const every = Object.values(D.plots); const isPre = p => p.trpl === 'Before TRPL'; const nPre = every.filter(isPre).length;
   const all = every.filter(p => isPre(p) ? plotView.before : plotView.after);
-  const t = tbl('plots', cols, all, {rowGo: p => '#/plot/' + encodeURIComponent(p.no), noun: 'plots', order: (a, b) => a.sr - b.sr});
+  const t = tbl('plots', cols, EXPORT_ALL ? every : all, {rowGo: p => '#/plot/' + encodeURIComponent(p.no), noun: 'plots', title: 'Plots', order: (a, b) => (isPrePlot(a) - isPrePlot(b)) || (plotSr.get(a.no) - plotSr.get(b.no))});
   return crumbs([['Files'], ['Plots']]) + `<div class="row" style="justify-content:space-between"><h1>Plots</h1><div class="row">${['list', 'grid'].map(k => `<span class="chip ${plotView.mode === k ? 'on' : ''}" data-pv="${k}">${k === 'grid' ? 'Grid' : 'List'}</span>`).join('')}</div></div>
   <p class="sub">${every.length} plots in the Plot List sheet. In the grid, click a colour to highlight those plots; the rest fade but stay in place.</p>
   <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="muted" style="font-size:12.5px;margin-right:4px">Show</span><span class="chip${plotView.after ? ' on' : ''}" data-phase="after">TRPL plots <span class="muted">${every.length - nPre}</span></span><span class="chip${plotView.before ? ' on' : ''}" data-phase="before">Before TRPL <span class="muted">${nPre}</span></span><span class="muted" style="font-size:12.5px;margin-left:4px">${plotView.before && plotView.after ? 'Showing all plots' : plotView.before ? 'Showing only plots sold before TRPL' : 'Plots sold before TRPL are hidden'}</span></div>
@@ -877,7 +893,7 @@ V.plot = no => {
   const owner = plotOwner[no] ? clientById[plotOwner[no]] : null;
   const bks = D.bookings.filter(b => b.plot === no); const d = D.dastavej[no]; const r = D.registry[no]; const l = landByPlot()[no];
   const pays = D.payments.filter(x => x.plots.includes(no));
-  return crumbs([['Files'], ['Plots', '#/plots'], ['Plot ' + no]]) + `<h1>Plot ${esc(no)} <span class="badge ${pc[2]}" style="vertical-align:4px">${pc[1]}</span></h1><p class="sub">Sr. ${p.sr || '—'}</p>
+  return crumbs([['Files'], ['Plots', '#/plots'], ['Plot ' + no]]) + `<h1>Plot ${esc(no)} <span class="badge ${pc[2]}" style="vertical-align:4px">${pc[1]}</span></h1><p class="sub">${plotSrLabel(p)}</p>
   <div class="split"><div>
   ${D.plots[no] ? `<div class="card"><h2>Plot <span class="src">Plot List sheet</span></h2>${kv([['Status', ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${pc[2]}">${pc[1]}</span>`)], ['Area (sq yd)', ed('plots', p, 'area', 'number')], ['Note', ed('plots', p, 'note')]])}</div>` : ''}
   ${owner ? `<div class="card"><h2>Client</h2><a class="folder" data-go="#/client/${owner.id}">${ico('users')}<div><b>${esc(owner.name)}</b><span>${esc(owner.phone || '')} · open client folder</span></div></a></div>` : ''}
@@ -997,6 +1013,181 @@ V.history = () => {
   return crumbs([['Admin'], ['Edit history']]) + `<h1>Edit history</h1><p class="sub">Every change, who made it and when.</p>${t.html}${steps}`;
 };
 
+// ---------- Export to Excel / CSV ----------
+const canExport = () => ME.role !== 'Agent';
+const isoDay = v => typeof v === 'string' && /^\d{4}-\d\d-\d\d/.test(v);
+function cellValue(c, r) {
+  let v = c.get(r);
+  if (Array.isArray(v)) v = v.join(', ');
+  if (v == null || v === '') return null;
+  if ((c.type === 'num' || c.type === 'money') && typeof v === 'number' && isFinite(v)) return {n: v, money: c.type === 'money'};
+  if (c.type === 'date' && isoDay(v)) return {d: v.slice(0, 10)};
+  return String(v);
+}
+function tableSheet(T, name) {
+  const cols = T.cols.filter(c => c.label && c.k !== 'act');
+  return {name, head: cols.map(c => c.label), rows: (T.useAll ? T.rows : T.shown).map(r => cols.map(c => cellValue(c, r)))};
+}
+const crcTable = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = crcTable[(c ^ u[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zipFiles(files) { // files: [{name, data: Uint8Array}] — stored (no compression), which Excel reads fine
+  const enc = new TextEncoder(); const parts = [], central = []; let off = 0;
+  const u16 = n => [n & 255, (n >>> 8) & 255], u32 = n => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
+  for (const f of files) {
+    const nm = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+    const head = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+    parts.push(head, nm, f.data);
+    central.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += head.length + nm.length + sz;
+  }
+  const cdSize = central.reduce((a, x) => a + x.length, 0);
+  const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cdSize), ...u32(off), ...u16(0)]);
+  return new Blob([...parts, ...central, end], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+const xmlEsc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c])).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+const colName = i => { let s = ''; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+const excelDate = iso => (Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) - Date.UTC(1899, 11, 30)) / 864e5;
+function makeXlsx(sheets) {
+  const enc = new TextEncoder(); const used = new Set();
+  const names = sheets.map(s => { let n = String(s.name).replace(/[\[\]:*?\/\\]/g, ' ').slice(0, 31) || 'Sheet'; let k = n, i = 2; while (used.has(k.toLowerCase())) k = n.slice(0, 28) + ' ' + i++; used.add(k.toLowerCase()); return k; });
+  const sheetXml = s => {
+    const widths = s.head.map((h, i) => Math.min(60, Math.max(String(h).length, ...s.rows.slice(0, 500).map(r => r[i] == null ? 0 : typeof r[i] === 'string' ? r[i].length : r[i].d ? 10 : String(r[i].n).length + 3)) + 2));
+    const cell = (v, ref) => v == null ? '' : typeof v === 'string' ? `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`
+      : v.d ? `<c r="${ref}" s="3"><v>${excelDate(v.d)}</v></c>` : `<c r="${ref}" s="${v.money ? 2 : 4}"><v>${v.n}</v></c>`;
+    const head = `<row r="1">${s.head.map((h, i) => `<c r="${colName(i)}1" t="inlineStr" s="1"><is><t>${xmlEsc(h)}</t></is></c>`).join('')}</row>`;
+    const body = s.rows.map((r, ri) => `<row r="${ri + 2}">${r.map((v, ci) => cell(v, colName(ci) + (ri + 2))).join('')}</row>`).join('');
+    const last = colName(Math.max(0, s.head.length - 1)) + (s.rows.length + 1);
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('')}</cols><sheetData>${head}${body}</sheetData>${s.head.length ? `<autoFilter ref="A1:${last}"/>` : ''}</worksheet>`;
+  };
+  const files = [
+    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`],
+    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${names.map((n, i) => `<sheet name="${xmlEsc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets>${sheets.map((s, i) => s.head.length ? `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xmlEsc(names[i]).replace(/'/g, "''")}'!$A$1:$${colName(s.head.length - 1)}$${s.rows.length + 1}</definedName></definedNames>` : '').join('').replace(/<\/definedNames><definedNames>/g, '')}</workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/><numFmt numFmtId="165" formatCode="#,##,##0"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF1EBE2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`],
+    ...sheets.map((s, i) => [`xl/worksheets/sheet${i + 1}.xml`, sheetXml(s)])
+  ];
+  return zipFiles(files.map(([name, xml]) => ({name, data: enc.encode(xml)})));
+}
+function makeCsv(s) {
+  const q = v => { if (v == null) return ''; const x = typeof v === 'string' ? v : v.d ? fd(v.d) : String(v.n); return /[",\n\r]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+  return new Blob(['﻿' + [s.head, ...s.rows].map(r => r.map(q).join(',')).join('\r\n')], {type: 'text/csv;charset=utf-8'});
+}
+function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+const fileStamp = () => new Date().toISOString().slice(0, 10);
+const safeName = s => String(s || 'Export').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') || 'Export';
+function exportTable(key, fmt) {
+  const T = TABLES[key]; if (!T) return;
+  const title = T.title || ($('#view h1') ? $('#view h1').childNodes[0].textContent.trim() : key);
+  const s = tableSheet(T, title);
+  download(fmt === 'csv' ? makeCsv(s) : makeXlsx([s]), `Tatva-${safeName(title)}-${fileStamp()}.${fmt === 'csv' ? 'csv' : 'xlsx'}`);
+  toast(s.rows.length + ' rows exported');
+}
+function exportAll() {
+  const sheets = []; const saveLV = JSON.stringify(listView); const savePV = {...plotView};
+  EXPORT_ALL = true;
+  try {
+    const grab = (fn, keys, names) => { fn(); keys.forEach((k, i) => { if (TABLES[k]) sheets.push(tableSheet({...TABLES[k], useAll: true}, names[i])); }); };
+    grab(V.visits, ['visits'], ['Site visits']);
+    grab(V.clients, ['clients'], ['Clients']);
+    grab(V.plots, ['plots'], ['Plots']);
+    grab(V.landowners, ['landowners'], ['Sold plots']);
+    grab(V.partner, ['partner'], ['Land partner']);
+    grab(V.expenses, ['expenses'], ['Site expenses']);
+    grab(V.incentives, ['incentives', 'incentive-agents'], ['Incentives', 'Incentives by agent']);
+    const raw = (name, rows, cols) => sheets.push(tableSheet({cols, rows, useAll: true}, name));
+    raw('Bookings', [...D.bookings].sort((a, b) => (a.sr || 0) - (b.sr || 0)), [
+      {label: 'Sr.', type: 'num', get: b => b.sr}, {label: 'Client', get: b => b.client}, {label: 'Phone', get: b => b.phone}, {label: 'Plot', get: b => b.plot}, {label: 'Agent', get: b => b.by},
+      {label: 'Hold date', type: 'date', get: b => b.holdDate}, {label: 'Hold amount', type: 'money', get: b => b.holdAmount}, {label: 'Status', get: b => b.outcome},
+      {label: 'Final amount', type: 'money', get: b => b.finalAmount}, {label: 'Down payment', type: 'money', get: b => b.dpAmount}, {label: 'Down payment date', type: 'date', get: b => b.dpDate},
+      {label: 'Loan', get: b => b.loan}, {label: 'Loan amount', type: 'money', get: b => b.loanAmount}, {label: 'EMI', type: 'money', get: b => b.emi}, {label: 'Refund', get: b => b.refunded}, {label: 'Remarks', get: b => b.remarks}]);
+    raw('Payments', [...D.payments].sort((a, b) => (a.sr || 0) - (b.sr || 0)), [
+      {label: 'Sr.', type: 'num', get: p => p.sr}, {label: 'Date', type: 'date', get: p => p.date}, {label: 'Entry', get: p => p.text}, {label: 'Amount', type: 'money', get: p => p.amount},
+      {label: 'Mode', get: p => p.mode}, {label: 'Plots', get: p => (p.plots || []).join(', ')}, {label: 'Client', get: p => p.clients.map(id => (clientById[id] || {}).name).filter(Boolean).join(', ')},
+      {label: 'Status', get: p => p.status}, {label: 'Note', get: p => p.note}]);
+    raw('Contractor ledger', D.contractors.flatMap(c => c.ledger.map(l => ({...l, contractor: c.name}))), [
+      {label: 'Contractor', get: l => l.contractor}, {label: 'Date', type: 'date', get: l => l.date}, {label: 'Particular', get: l => l.particular}, {label: 'Amount', type: 'money', get: l => l.amount}, {label: 'Mode', get: l => l.mode}]);
+  } finally { EXPORT_ALL = false; Object.assign(listView, JSON.parse(saveLV)); Object.assign(plotView, savePV); }
+  download(makeXlsx(sheets), `Tatva-CRM-all-data-${fileStamp()}.xlsx`);
+  toast(sheets.length + ' sheets exported'); render();
+}
+
+// ---------- Delete (Super admin) and Deleted items ----------
+const DELETABLE = ['visits', 'clients', 'bookings', 'payments', 'expenses', 'landowners', 'advances', 'incentives', 'registry', 'dastavej', 'ledger'];
+const canDelete = () => ME.role === 'Super admin';
+function snapAll() {
+  const s = snap();
+  ['landowners', 'advances', 'incentives'].forEach(k => { s[k] = {}; D[k].forEach(o => s[k][o.id] = JSON.stringify(o)); });
+  ['registry', 'dastavej'].forEach(k => { s[k] = {}; Object.values(D[k]).forEach(o => s[k][o.id] = JSON.stringify(o)); });
+  s.ledger = {}; D.contractors.forEach(c => c.ledger.forEach(l => s.ledger[l.id] = JSON.stringify(l)));
+  return s;
+}
+function removedOps(s) {
+  const ops = [];
+  const have = {visits: D.visits, clients: D.clients, bookings: D.bookings, payments: D.payments, expenses: D.expenses, landowners: D.landowners, advances: D.advances, incentives: D.incentives,
+    registry: Object.values(D.registry), dastavej: Object.values(D.dastavej), ledger: D.contractors.flatMap(c => c.ledger)};
+  Object.entries(have).forEach(([k, arr]) => { const ids = new Set(arr.map(o => o.id)); Object.keys(s[k] || {}).forEach(id => { if (!ids.has(id)) ops.push({op: 'del', coll: k, id}); }); });
+  Object.keys(s.plotOwners).forEach(k => { if (!(k in D.plotOwners)) ops.push({op: 'del', coll: 'plotOwners', id: k}); });
+  return ops;
+}
+function cascadeDelete(coll, o) {
+  const drop = (arr, id) => { const i = arr.findIndex(x => x.id === id); if (i >= 0) arr.splice(i, 1); };
+  const freeHeldPlot = b => { const p = D.plots[b.plot]; if (p && /HOLD/i.test(p.status || '') && !D.bookings.some(x => x.id !== b.id && x.plot === b.plot && /hold/i.test(x.outcome || ''))) p.status = 'UNSOLD'; };
+  if (coll === 'clients') {
+    for (const id of o.bookings) { const b = bookingById[id]; if (b && /hold/i.test(b.outcome || '')) freeHeldPlot(b); drop(D.bookings, id); }
+    D.payments.filter(p => p.clients.includes(o.id)).forEach(p => { if (p.clients.length === 1) drop(D.payments, p.id); else p.clients = p.clients.filter(x => x !== o.id); });
+    Object.keys(D.plotOwners).forEach(k => { if (D.plotOwners[k] === o.id) delete D.plotOwners[k]; });
+    D.visits.forEach(v => { if (v.client === o.id) v.client = null; });
+    drop(D.clients, o.id);
+  } else if (coll === 'bookings') {
+    if (/hold/i.test(o.outcome || '')) freeHeldPlot(o);
+    D.clients.forEach(c => { if (c.bookings.includes(o.id)) c.bookings = c.bookings.filter(x => x !== o.id); });
+    drop(D.bookings, o.id);
+  } else if (coll === 'registry' || coll === 'dastavej') {
+    Object.keys(D[coll]).forEach(k => { if (D[coll][k].id === o.id) delete D[coll][k]; });
+  } else if (coll === 'ledger') {
+    D.contractors.forEach(c => drop(c.ledger, o.id));
+  } else {
+    drop(D[coll], o.id);
+    if (coll === 'expenses') D.contractors.forEach(c => drop(c.expenses, o.id));
+  }
+}
+function deleteDlg(coll, id, go) {
+  if (!canDelete() || !DELETABLE.includes(coll)) return;
+  const o = IDX[coll][id]; if (!o) return;
+  const label = describe(coll, o);
+  let extra = '';
+  if (coll === 'clients') {
+    const nb = o.bookings.length, np = D.payments.filter(p => p.clients.includes(o.id)).length;
+    extra = `<p style="margin:0">This also deletes the folder's <b>${nb} booking${nb === 1 ? '' : 's'}</b> and <b>${np} payment${np === 1 ? '' : 's'}</b>. Plots it was holding go back to Unsold. Site visits stay, unlinked.</p>`;
+  }
+  openDlg('Delete?', esc(label), `${extra}<p style="margin:0">It moves to <b>Admin → Deleted items</b> with who deleted it and when, and a Super admin can restore it from there.</p>`, 'Delete', () => {
+    const s = snapAll(); closeDlg(); cascadeDelete(coll, o); reindex();
+    const grp = 'G' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const ops = removedOps(s).concat(diffOps(s)).map(x => ({...x, grp, label}));
+    ops.push({op: 'step', type: 'delete', data: {grp, label, coll, id}});
+    if (go) location.hash = go; else render();
+    saving = true;
+    sendOps(ops).then(() => { store.flows.push({type: 'delete', grp, label, user: ME.name, role: ME.role, at: new Date().toISOString()}); toast('Deleted. You can restore it from Deleted items.'); render(); })
+      .catch(e => { toast(e.message + ' Reloading…'); setTimeout(() => location.reload(), 2500); }).finally(() => { saving = false; });
+  });
+  const ok = $('[data-dlgok]'); if (ok) ok.classList.add('danger');
+}
+let TRASH = null;
+V.trash = () => {
+  if (!canDelete()) return '<h1>Deleted items</h1><p class="muted">Only a Super admin can see deleted items.</p>';
+  if (!TRASH) { api('/api/trash').then(r => { TRASH = r.groups; render(); }).catch(e => toast(e.message)); return crumbs([['Admin'], ['Deleted items']]) + '<h1>Deleted items</h1><p class="muted">Loading…</p>'; }
+  const t = tbl('trash', [
+    {k: 'at', label: 'Deleted on', type: 'date', get: g => g.at, cell: g => new Date(g.at).toLocaleString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'})},
+    {k: 'label', label: 'What', nofilter: true, get: g => g.label, cell: g => `<b>${esc(g.label || '')}</b>`},
+    {k: 'n', label: 'Records', type: 'num', get: g => g.deleted, cell: g => `${g.deleted} deleted${g.changed ? `, ${g.changed} changed` : ''}`},
+    {k: 'by', label: 'Deleted by', get: g => g.user_name},
+    {k: 'st', label: 'Status', get: g => g.restored_at ? 'Restored' : 'Deleted', cell: g => g.restored_at ? `<span class="badge b-sold">Restored</span> <span class="muted">by ${esc(g.restored_by || '')}</span>` : '<span class="badge b-lapsed">Deleted</span>'},
+    {k: 'act', label: '', nofilter: true, get: () => null, cell: g => g.restored_at ? '' : `<button class="btn small" data-restore="${esc(g.grp)}">Restore</button>`}
+  ], TRASH, {noun: 'deletions', title: 'Deleted items'});
+  return crumbs([['Admin'], ['Deleted items']]) + `<h1>Deleted items</h1><p class="sub">Everything a Super admin deleted, kept in full. Restore puts the records back as they were at the moment of deleting, including any plot or client the delete changed.</p>${t.html}`;
+};
+
 // ---------- Users ----------
 let USERS = null, usersLoading = false;
 function loadUsers() { if (usersLoading) return; usersLoading = true; api('/api/users').then(r => { USERS = r.users; usersLoading = false; render(); }).catch(e => { usersLoading = false; toast(e.message); }); }
@@ -1069,6 +1260,7 @@ function render() {
   else if (v === 'contractor') { html = V.contractor(a); nav = 'contractors'; }
   else if (v === 'expenses') html = V.expenses();
   else if (v === 'users') html = V.users();
+  else if (v === 'trash') html = V.trash();
   else if (v === 'incentives') html = V.incentives();
   else if (v === 'history') html = V.history();
   else if (v === 'check') html = V.check();
@@ -1102,6 +1294,10 @@ document.addEventListener('click', e => {
   const add = t.closest('[data-add]'); if (add) { showAdd = add.dataset.add || null; render(); return; }
   const sv = t.closest('[data-save]'); if (sv) { saveNew(sv.dataset.save); return; }
   const un = t.closest('[data-undo]'); if (un) { undo(+un.dataset.undo); return; }
+  const ex = t.closest('[data-exp]'); if (ex) { exportTable(ex.dataset.exp, ex.dataset.fmt); return; }
+  if (t.closest('[data-expall]')) { exportAll(); return; }
+  const dl = t.closest('[data-del]'); if (dl) { const [c, i, g] = dl.dataset.del.split('|'); deleteDlg(c, i, g); return; }
+  const rs = t.closest('[data-restore]'); if (rs) { rs.disabled = true; api('/api/restore', {body: {grp: rs.dataset.restore}}).then(r => { toast(r.restored + ' record(s) restored. Reloading…'); setTimeout(() => location.reload(), 900); }).catch(e => { rs.disabled = false; toast(e.message); }); return; }
   if (t.closest('[data-logout]')) { api('/api/logout', {body: {}}).finally(() => location.reload()); return; }
   if (t.closest('[data-mypass]')) { myPasswordDlg(); return; }
   if (t.closest('[data-uadd]')) { userDlg(null); return; }

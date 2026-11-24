@@ -17,7 +17,9 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('Agent','Admin','Super admin')), pass_hash TEXT NOT NULL, salt TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, failed INTEGER NOT NULL DEFAULT 0, locked_until TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), last_login TEXT)`,
   `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)`,
-  `INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '0')`
+  `INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '0')`,
+  `CREATE TABLE IF NOT EXISTS trash (id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT NOT NULL, coll TEXT NOT NULL, rec_id TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, label TEXT, user_id INTEGER, user_name TEXT, at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), restored_at TEXT, restored_by TEXT)`,
+  `CREATE INDEX IF NOT EXISTS trash_grp ON trash (grp)`
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
@@ -208,7 +210,7 @@ async function apiVersion(env) {
 async function apiOps(env, req, user) {
   const b = await req.json().catch(() => null);
   const ops = b && Array.isArray(b.ops) ? b.ops : null;
-  if (!ops || !ops.length || ops.length > 50) return fail(400, 'Nothing to save.');
+  if (!ops || !ops.length || ops.length > 400) return fail(400, 'Nothing to save.');
   const stmts = [];
   const assigned = {};
   const maxSr = {};
@@ -218,7 +220,7 @@ async function apiOps(env, req, user) {
   };
   const working = {}; // records changed earlier in this same request
   for (const op of ops) {
-    if (op.op === 'patch' || op.op === 'put') {
+    if (op.op === 'patch' || op.op === 'put' || op.op === 'del') {
       if (!COLLS.has(op.coll) || typeof op.id !== 'string' || !op.id || op.id.length > 100) return fail(400, 'Unknown record.');
     }
     if (op.op === 'patch') {
@@ -242,6 +244,11 @@ async function apiOps(env, req, user) {
       const cur = working[key] || await getRec(op.coll, op.id);
       const lock = lockError(user, op.coll, cur, data);
       if (lock) return fail(403, lock);
+      if (op.grp && cur != null) {
+        if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can delete.');
+        stmts.push(env.DB.prepare('INSERT INTO trash (grp, coll, rec_id, kind, data, label, user_id, user_name) VALUES (?,?,?,?,?,?,?,?)')
+          .bind(op.grp, op.coll, op.id, 'before', JSON.stringify(cur), String(op.label || '').slice(0, 300), user.id, user.name));
+      }
       if (op.coll === 'plotOwners') {
         stmts.push(env.DB.prepare(`INSERT INTO records (coll, id, sr, data, updated_at, updated_by) VALUES (?,?,NULL,?,?,?)
           ON CONFLICT (coll, id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
@@ -259,8 +266,19 @@ async function apiOps(env, req, user) {
       stmts.push(env.DB.prepare(`INSERT INTO records (coll, id, sr, data, updated_at, updated_by) VALUES (?,?,?,?,?,?)
         ON CONFLICT (coll, id) DO UPDATE SET sr = excluded.sr, data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
         .bind(op.coll, op.id, sr, JSON.stringify(data), now(), user.name));
+    } else if (op.op === 'del') {
+      if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can delete.');
+      if (!COLLS.has(op.coll) || op.coll === 'plots' || typeof op.id !== 'string' || !op.id) return fail(400, 'This cannot be deleted.');
+      if (typeof op.grp !== 'string' || !/^[A-Za-z0-9_-]{6,40}$/.test(op.grp)) return fail(400, 'Missing delete group.');
+      const key = op.coll + '|' + op.id;
+      const cur = working[key] !== undefined ? working[key] : await getRec(op.coll, op.id);
+      if (cur == null) return fail(404, 'This record no longer exists. Refresh the page.');
+      working[key] = null;
+      stmts.push(env.DB.prepare('INSERT INTO trash (grp, coll, rec_id, kind, data, label, user_id, user_name) VALUES (?,?,?,?,?,?,?,?)')
+        .bind(op.grp, op.coll, op.id, 'deleted', JSON.stringify(cur), String(op.label || '').slice(0, 300), user.id, user.name));
+      stmts.push(env.DB.prepare('DELETE FROM records WHERE coll = ? AND id = ?').bind(op.coll, op.id));
     } else if (op.op === 'step') {
-      if (!['hold', 'book', 'pay', 'lapse', 'visit', 'expense'].includes(op.type)) return fail(400, 'Unknown step.');
+      if (!['hold', 'book', 'pay', 'lapse', 'visit', 'expense', 'delete'].includes(op.type)) return fail(400, 'Unknown step.');
       stmts.push(env.DB.prepare('INSERT INTO steps (type, data, user_id, user_name, role) VALUES (?,?,?,?,?)')
         .bind(op.type, JSON.stringify(op.data || {}), user.id, user.name, user.role));
     } else return fail(400, 'Unknown change.');
@@ -292,6 +310,36 @@ async function apiImport(env, req, user) {
   for (let i = 0; i < stmts.length; i += 40) await env.DB.batch(stmts.slice(i, i + 40));
   await env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'").run();
   return json({ok: true, records: recs.length});
+}
+
+// ---------- deleted items (Super admin) ----------
+async function apiTrash(env, user) {
+  if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can see deleted items.');
+  const r = await env.DB.prepare(`SELECT grp, MIN(at) AS at, MAX(user_name) AS user_name, MAX(restored_at) AS restored_at, MAX(restored_by) AS restored_by,
+      SUM(kind = 'deleted') AS deleted, SUM(kind = 'before') AS changed,
+      (SELECT label FROM trash t2 WHERE t2.grp = trash.grp ORDER BY t2.id LIMIT 1) AS label,
+      GROUP_CONCAT(CASE WHEN kind = 'deleted' THEN coll END) AS colls
+    FROM trash GROUP BY grp ORDER BY MIN(id) DESC LIMIT 500`).all();
+  return json({groups: r.results});
+}
+async function apiRestore(env, req, user) {
+  if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can restore.');
+  const b = await req.json().catch(() => ({}));
+  const rows = (await env.DB.prepare('SELECT * FROM trash WHERE grp = ? ORDER BY id').bind(String(b.grp || '')).all()).results;
+  if (!rows.length) return fail(404, 'Nothing to restore.');
+  if (rows.some(r => r.restored_at)) return fail(409, 'This was already restored.');
+  const stmts = rows.map(r => {
+    const data = JSON.parse(r.data);
+    return env.DB.prepare(`INSERT INTO records (coll, id, sr, data, updated_at, updated_by) VALUES (?,?,?,?,?,?)
+      ON CONFLICT (coll, id) DO UPDATE SET sr = excluded.sr, data = excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+      .bind(r.coll, r.rec_id, data && typeof data === 'object' ? (data.sr ?? null) : null, r.data, now(), user.name);
+  });
+  stmts.push(env.DB.prepare('UPDATE trash SET restored_at = ?, restored_by = ? WHERE grp = ?').bind(now(), user.name, rows[0].grp));
+  stmts.push(env.DB.prepare('INSERT INTO steps (type, data, user_id, user_name, role) VALUES (?,?,?,?,?)')
+    .bind('restore', JSON.stringify({grp: rows[0].grp, label: rows[0].label}), user.id, user.name, user.role));
+  stmts.push(env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'"));
+  await env.DB.batch(stmts);
+  return json({ok: true, restored: rows.filter(r => r.kind === 'deleted').length});
 }
 
 // ---------- users ----------
@@ -395,6 +443,8 @@ export default {
       if (path === '/api/ops' && req.method === 'POST') return apiOps(env, req, user);
       if (path === '/api/password' && req.method === 'POST') return apiPassword(env, req, user);
       if (path === '/api/import' && req.method === 'POST') return apiImport(env, req, user);
+      if (path === '/api/trash' && req.method === 'GET') return apiTrash(env, user);
+      if (path === '/api/restore' && req.method === 'POST') return apiRestore(env, req, user);
       if (path === '/api/users') return apiUsers(env, req, user);
       const m = path.match(/^\/api\/users\/(\d+)$/);
       if (m && req.method === 'PATCH') return apiUserUpdate(env, req, user, Number(m[1]));
