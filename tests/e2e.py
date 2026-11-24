@@ -50,7 +50,7 @@ with sync_playwright() as p:
     r=g.evaluate("s => __dbg(s)", """fetch('/api/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'x',username:'hacker',role:'Super admin',password:'123456'})}).then(r=>r.status)"""); ok(r==403, 'Agent cannot create users')
     # agent registers a visit with a hold
     g.evaluate("s => __dbg(s)", "location.hash='#/visits'"); g.wait_for_timeout(300)
-    g.click('[data-addvisit]'); g.fill('#nv_name','Agent Walkin'); g.fill('#nv_phone','9111122222'); g.click('[data-chip=hold]')
+    g.click('[data-addvisit]'); g.fill('#nv_name','Agent Walkin'); g.fill('#nv_phone','9111122222'); g.click('.chips[data-group=agents] .chip >> nth=0'); g.click('[data-chip=Hold]')
     plot=g.evaluate("s => __dbg(s)", "freePlots()[0].no"); g.select_option('#nv_plot',plot); g.click('[data-dlgok]'); g.wait_for_timeout(1500)
     cid=g.evaluate("s => __dbg(s)", "location.hash.split('/')[2]")
     ok(cid.startswith('CN'), 'Agent visit+hold created client folder '+cid)

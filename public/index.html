@@ -140,6 +140,7 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
 .stat small{color:var(--ink3);font-size:12px}.stat div{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.clip{display:inline-block;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
 .acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--hold-bg);border-radius:8px;padding:8px 10px;margin:0 0 12px;font-size:13px}.acts span{flex:1;min-width:160px;color:var(--hold)}
 .note{font-size:12.5px;color:var(--ink2);background:var(--accent-bg);border-radius:8px;padding:9px 12px;margin-bottom:14px}
 .split{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px;align-items:start}
@@ -350,6 +351,7 @@ const clientFinal = c => { const conv = c.bookings.map(id => bookingById[id]).fi
   if (conv.length) return conv.reduce((s, b) => s + b.finalAmount, 0);
   const deeds = clientPlots(c).map(p => D.dastavej[p]).filter(d => d && d.finalAmount); return deeds.length ? deeds.reduce((s, d) => s + d.finalAmount, 0) : null; };
 const lastHoldBooking = c => c.bookings.map(id => bookingById[id]).filter(b => b.holdDate || b.holdAmount).sort((a, b) => String(a.holdDate || '').localeCompare(String(b.holdDate || ''))).pop() || null;
+const clientDate = c => { const ds = c.bookings.map(id => bookingById[id]).flatMap(b => [b.holdDate, b.dpDate, b.bookingDate]).filter(d => d && /^\d{4}-\d\d-\d\d/.test(d)).sort(); return ds.length ? ds[ds.length - 1] : null; };
 const amtCell = (p, html) => received(p) ? html : `<span style="text-decoration:line-through;color:var(--ink3)">${html}</span>`;
 const payBadge = p => received(p) ? '<span class="badge b-sold">Received</span>' : '<span class="badge b-lapsed">Cheque returned</span>';
 function plotClass(p) {
@@ -366,6 +368,7 @@ const AGENTS = [...new Set([...D.visits, ...D.bookings].flatMap(x => agentsOf(x.
 const OPTS = {
   visitStatus: ['Follow up', 'Converted', 'Not interested'],
   agents: [...AGENTS, 'Company'],
+  incAgents: AGENTS.filter(a => !/pratik/i.test(a)),
   outcome: ['Plot On Hold', 'Converted', 'Lapsed'],
   plotStatus: ['UNSOLD', 'HOLD', 'SOLD OUT', 'DEVELOPMENT AREA'],
   forWhat: ['Plots', 'Villas', 'Plots, Villas'],
@@ -440,7 +443,7 @@ document.addEventListener('click', e => {
   if ($('#dlg').firstChild) {
     if (t.closest('[data-dlgclose]') || t.matches('[data-dlgbg]')) { e.stopPropagation(); closeDlg(); return; }
     if (t.closest('[data-dlgok]')) { e.stopPropagation(); if (dlgSave) dlgSave(); return; }
-    const chip = t.closest('[data-chip]'); if (chip) { e.stopPropagation(); chip.parentNode.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip)); if (chip.parentNode.dataset.group === 'deal') dealFields(); return; }
+    const chip = t.closest('[data-chip]'); if (chip) { e.stopPropagation(); if (chip.parentNode.hasAttribute('data-multi')) chip.classList.toggle('on'); else chip.parentNode.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip)); if (chip.parentNode.dataset.group === 'deal') dealFields(); return; }
     const dg = t.closest('.dlg [data-go]'); if (dg) { e.stopPropagation(); closeDlg(); location.hash = dg.dataset.go; return; }
     if (t.closest('.dlg')) return;
   }
@@ -453,13 +456,16 @@ document.addEventListener('click', e => {
     const [coll, id, f, kind, opt] = s.dataset.e.split('|'); const o = IDX[coll][id]; const cur = getF(coll, o, f);
     const label = s._label || fieldLabel(f); const dis = s.dataset.lock ? ' disabled' : ''; const nm = 'dlg_f' + i;
     let input;
+    if (kind === 'select' && opt === 'agents' && !s.dataset.lock) {
+      return {coll, id, f, kind: 'agents', o, nm, html: `<label style="grid-column:1/-1">${esc(label)} <span class="muted">(choose one or more)</span>${agentChips(cur, nm)}</label>`, lock: false};
+    }
     if (kind === 'select') {
       const opts = [...OPTS[opt]]; if (cur && !opts.includes(cur) && !(opt === 'visitStatus')) opts.unshift(cur);
       const curLabel = opt === 'visitStatus' ? vStatus(o)[0] : cur;
       input = `<select id="${nm}"${dis}><option value="">—</option>${opts.map(x => `<option ${x === curLabel ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
     } else if (kind === 'date' && (!cur || isISO(cur))) input = `<input id="${nm}" type="date" value="${esc(cur || '')}"${dis}>`;
     else if (kind === 'money' || kind === 'number') input = `<input id="${nm}" type="number" step="any" value="${cur ?? ''}"${dis}>`;
-    else if (String(cur ?? '').length > 60) input = `<textarea id="${nm}" rows="3"${dis}>${esc(cur ?? '')}</textarea>`;
+    else if (String(cur ?? '').length > 60 || /^remarks?$/.test(f)) input = `<textarea id="${nm}" rows="3"${dis}>${esc(cur ?? '')}</textarea>`;
     else input = `<input id="${nm}" type="text" value="${esc(cur ?? '')}"${dis}>`;
     return {coll, id, f, kind, o, nm, html: `<label>${esc(label)}${input}${dis ? `<span class="lk">${esc(s.dataset.lock)}</span>` : ''}</label>`, lock: !!dis, initial: null};
   });
@@ -469,7 +475,7 @@ document.addEventListener('click', e => {
     const changes = [];
     fields.forEach(x => {
       if (x.lock) return;
-      let nv = $('#' + x.nm).value.trim();
+      let nv = x.kind === 'agents' ? chipVals(x.nm).join(', ') : $('#' + x.nm).value.trim();
       if (x.kind === 'money' || x.kind === 'number') nv = nv === '' ? null : Number(nv); else nv = nv === '' ? null : nv;
       const ov = getF(x.coll, x.o, x.f);
       if (x.coll === 'visits' && x.f === 'status' && nv === vStatus(x.o)[0]) return;
@@ -479,8 +485,7 @@ document.addEventListener('click', e => {
     if (!changes.length) { closeDlg(); return; }
     const ops = [], copies = {};
     changes.forEach(({x, nv}) => { ops.push({op: 'patch', coll: x.coll, id: x.id, field: x.f, value: nv, label: describe(x.coll, x.o)});
-      if (x.coll === 'visits' && /^fu\d/.test(x.f)) { const k = x.id; copies[k] = copies[k] || JSON.parse(JSON.stringify(x.o)); setF('visits', copies[k], x.f, nv); } });
-    Object.entries(copies).forEach(([id, copy]) => ops.push({op: 'patch', coll: 'visits', id, field: 'followups', value: copy.followups, silent: true}));
+    });
     const btn = $('[data-dlgok]'); btn.disabled = true; btn.textContent = 'Saving…';
     sendOps(ops).then(() => {
       changes.forEach(({x, nv}) => { setF(x.coll, x.o, x.f, nv); editedSet.add(x.coll + '|' + x.id + '|' + x.f); });
@@ -629,6 +634,7 @@ function renderNav(cur) {
 }
 const V = {};
 const plotView = {mode: 'list', hl: new Set(), before: false, after: true};
+const listView = {visitsLapsed: false, clientsLapsed: false};
 const clientSel = {};
 
 // ---------- Site visits ----------
@@ -644,12 +650,15 @@ V.visits = () => {
     {k: 'phone', label: 'Phone', nofilter: true, get: v => v.phone, cell: v => ed('visits', v, 'phone')},
     {k: 'by', label: 'Agent', get: v => v.by, multi: v => agentsOf(v.by), cell: v => ed('visits', v, 'by', 'select', 'agents')},
     {k: 'status', label: 'Status', order: ['Follow up', 'Converted', 'Not interested', 'No status'], get: v => vStatus(v)[0], cell: v => ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${vStatus(v)[1]}">${vStatus(v)[0]}</span>`)},
-    {k: 'fu', label: 'Follow-up', get: v => FU_LABEL[fuStage(v)]},
-    {k: 'note', label: 'Latest note', nofilter: true, get: v => { const s = fuStage(v); return s ? v['fu' + s + 'Note'] : v.remark; }, cell: v => { const s = fuStage(v); return `<span class="muted">${val(s ? v['fu' + s + 'Note'] : v.remark)}</span>`; }}
+    {k: 'remark', label: 'Remark', nofilter: true, get: v => v.remark, cell: v => `<span class="muted clip">${val(v.remark)}</span>`}
   ];
-  const t = tbl('visits', cols, D.visits, {rowGo: v => '#/visit/' + v.id, limit: 200, noun: 'visits', order: (a, b) => b.sr - a.sr});
+  const isLapsedVisit = v => { const c = v.client && clientById[v.client]; return !!c && clientStatus(c)[0] === 'Lapsed'; };
+  const nLapsed = D.visits.filter(isLapsedVisit).length;
+  const rows = D.visits.filter(v => isLapsedVisit(v) === !!listView.visitsLapsed);
+  const t = tbl('visits' + (listView.visitsLapsed ? '-lapsed' : ''), cols, rows, {rowGo: v => listView.visitsLapsed ? '#/client/' + v.client : '#/visit/' + v.id, limit: 200, noun: 'visits', order: (a, b) => b.sr - a.sr});
   return crumbs([['Files'], ['Site visits']]) + `<div class="row" style="justify-content:space-between"><h1>Site visits</h1><button class="btn primary" data-addvisit>+ Add visit</button></div>
   <p class="sub">Every visitor is registered here first. Use the ${FUNNEL} button in any column header to sort or filter, as in Google Sheets. A Converted visit is locked for agents.</p>
+  <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="chip${!listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="">Active visits <span class="muted">${D.visits.length - nLapsed}</span></span><span class="chip${listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="1">Lapsed <span class="muted">${nLapsed}</span></span>${listView.visitsLapsed ? '<span class="muted" style="font-size:12.5px;margin-left:4px">Visits whose hold lapsed. Click a row to open the client.</span>' : ''}</div>
   ${t.html}`;
 };
 const openAddVisit = () => {
@@ -660,20 +669,19 @@ const openAddVisit = () => {
   <div class="g2"><label>Name *<input id="nv_name" placeholder="Full name"></label><label>Phone<input id="nv_phone" inputmode="numeric" maxlength="14" placeholder="10-digit mobile"></label></div>
   <div id="nv_dup"></div>
   <div class="sec">Visit</div>
-  <div class="g2"><label>Visit date *<input type="date" id="nv_date" value="${today}"></label><label>Agent *<select id="nv_by">${OPTS.agents.map(a => `<option>${esc(a)}</option>`).join('')}</select></label></div>
-  <label>Status${chips('status', OPTS.visitStatus.filter(s => s !== 'Converted' || ROLE() !== 'Agent'), 'Follow up')}</label>
-  <label>Note (people, budget, plot liked…)<input id="nv_extra" placeholder="e.g. 4 people, liked plot 120, budget 15 lakh"></label>
-  <div class="sec">What happened at the visit</div>
-  <div class="chips" data-group="deal"><button type="button" class="chip on" data-chip="none">Only visited</button><button type="button" class="chip" data-chip="hold">Took hold on a plot</button><button type="button" class="chip" data-chip="book">Booked a plot</button></div>
+  <label>Visit date *<input type="date" id="nv_date" value="${today}" style="max-width:220px"></label>
+  <label>Agent * <span class="muted">(choose one or more)</span>${agentChips('')}</label>
+  <label>Status${chips('deal', ['Follow up', ...(ROLE() !== 'Agent' ? ['Converted'] : []), 'Not interested', 'Hold', 'Book'], 'Follow up')}</label>
   <div id="nv_deal" style="display:none;gap:12px">
     <label>Plot * <span class="muted">(unsold plots only)</span><select id="nv_plot"><option value="">Choose a plot</option>${freePlots().map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
     <div class="g2" id="nv_holdf"><label>Hold amount<input id="nv_hamt" type="number" value="1100"></label><label>Hold paid by${modeSel('nv_hmode', 'Cash')}</label></div>
     <div class="g2" id="nv_bookf"><label>Final amount *<input id="nv_final" type="number" placeholder="Agreed price"></label><label>Booking amount / down payment<input id="nv_bamt" type="number"></label><label>Paid by${modeSel('nv_bmode', 'Cheque')}</label></div>
   </div>
-  <label>Remark<textarea id="nv_remark" rows="2" placeholder="Anything else about the visit"></textarea></label>
-  <div class="sec">First follow-up</div>
-  <div class="g2"><label>Follow-up date<input type="date" id="nv_fu1d"></label><label>Follow-up note<input id="nv_fu1n" placeholder="What to talk about"></label></div>`, 'Save visit', () => saveNew('visit'), true);
+  <label>Remark<textarea id="nv_remark" rows="3" placeholder="Anything about the visit: people, budget, plots liked, what to talk about next…"></textarea></label>`, 'Save visit', () => saveNew('visit'), true);
 };
+const agentChips = (on, group = 'agents') => { const sel = new Set(agentsOf(on)); const list = [...new Set([...OPTS.agents, ...sel])];
+  return `<div class="chips" data-group="${group}" data-multi>${list.map(a => `<button type="button" class="chip${sel.has(a) ? ' on' : ''}" data-chip="${esc(a)}">${esc(a)}</button>`).join('')}</div>`; };
+const chipVals = group => [...document.querySelectorAll(`#dlg .chips[data-group="${group}"] .chip.on`)].map(c => c.dataset.chip);
 const freePlots = () => Object.values(D.plots).filter(p => plotClass(p)[1] === 'Unsold').sort((a, b) => a.sr - b.sr);
 const modeSel = (idn, on) => `<select id="${idn}">${OPTS.payMode.map(m => `<option ${m === on ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -694,7 +702,7 @@ function flowDlg(ds) {
     <div id="fh_match"></div>
     <label>Plot * <span class="muted">(only plots that are still unsold: ${free.length})</span><select id="fh_plot"><option value="">Choose a plot</option>${free.map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
     <div class="g2"><label>Hold amount<input id="fh_amt" type="number" value="1100"></label><label>Hold date *<input id="fh_date" type="date" value="${today()}"></label></div>
-    <div class="g2"><label>Paid by${modeSel('fh_mode', 'Cash')}</label><label>Agent<select id="fh_by">${OPTS.agents.map(a => `<option ${a === (v && agentsOf(v.by)[0]) ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label></div>
+    <div class="g2"><label>Paid by${modeSel('fh_mode', 'Cash')}</label><span></span></div><label>Agent <span class="muted">(choose one or more)</span>${agentChips(v ? v.by : '', 'fh_by')}</label>
     <label>Note<input id="fh_note" placeholder="Optional"></label>`, 'Save hold', () => {
       const name = c0 ? c0.name : $('#fh_name').value.trim(); const phone = c0 ? c0.phone : $('#fh_phone').value.replace(/\D/g, '') || null;
       if (!name) return err('Enter the client name.'); if (phone && phone.length !== 10) return err('Phone number should have 10 digits.');
@@ -702,7 +710,7 @@ function flowDlg(ds) {
       const match = !c0 && phone ? D.clients.find(x => x.phone === phone) : null; const target = c0 || match;
       const s = stamp();
       const f = {type: 'hold', at: new Date().toISOString(), role: ROLE(), vid: v ? v.id : null, cid: target ? target.id : 'CN' + s, csr: target ? target.sr : maxSr(D.clients) + 1, name, phone,
-        bid: 'BN' + s, bsr: maxSr(D.bookings) + 1, pid: 'PN' + s, psr: maxSr(D.payments) + 1, plot, amount: num('#fh_amt'), date: $('#fh_date').value, mode: $('#fh_mode').value, by: $('#fh_by').value, visitDate: v ? v.date : null, note: $('#fh_note').value.trim() || null};
+        bid: 'BN' + s, bsr: maxSr(D.bookings) + 1, pid: 'PN' + s, psr: maxSr(D.payments) + 1, plot, amount: num('#fh_amt'), date: $('#fh_date').value, mode: $('#fh_mode').value, by: chipVals('fh_by').join(', ') || null, visitDate: v ? v.date : null, note: $('#fh_note').value.trim() || null};
       runFlow(f, 'Plot ' + plot + ' is now on hold for ' + name, '#/client/' + f.cid);
     }, true);
     const hint = () => { const d = ($('#fh_phone').value || '').replace(/\D/g, ''); const m = !c0 && d.length === 10 && D.clients.find(x => x.phone === d); $('#fh_match').innerHTML = m ? `<div class="warn">This number is already the client <b>${esc(m.name)}</b>. The hold will go into that folder.</div>` : ''; };
@@ -746,8 +754,8 @@ function flowDlg(ds) {
 }
 function dealFields() {
   const k = ($('#dlg .chips[data-group=deal] .chip.on') || {dataset: {}}).dataset.chip; const box = $('#nv_deal'); if (!box) return;
-  box.style.display = k === 'none' ? 'none' : 'grid'; $('#nv_holdf').style.display = k === 'hold' ? '' : 'none'; $('#nv_bookf').style.display = k === 'book' ? '' : 'none';
-  const sts = $('#dlg .chips[data-group=status]'); if (sts && k !== 'none') sts.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c.dataset.chip === (k === 'book' && ROLE() !== 'Agent' ? 'Converted' : 'Follow up')));
+  const deal = k === 'Hold' || k === 'Book';
+  box.style.display = deal ? 'grid' : 'none'; $('#nv_holdf').style.display = k === 'Hold' ? '' : 'none'; $('#nv_bookf').style.display = k === 'Book' ? '' : 'none';
 }
 function visitDupHint() {
   const ph = ($('#nv_phone') || {}).value; const d = ph ? ph.replace(/\D/g, '') : ''; const box = $('#nv_dup'); if (!box) return;
@@ -758,14 +766,11 @@ V.visit = id => {
   const v = IDX.visits[id]; if (!v) return '<p>Visit not found.</p>';
   const s = vStatus(v); const c = v.client && clientById[v.client];
   const others = v.phone ? D.visits.filter(x => x.phone === v.phone && x.id !== v.id) : [];
-  const who = i => i <= 2 ? (v.by || 'Agent') : i === 3 ? 'Sahil Bhai' : 'Pratik Sir';
   return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
   <button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div><p class="sub">Sr. ${v.sr}</p>
   <div class="split"><div>
-  <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Note', ed('visits', v, 'extra')], ['Remark', ed('visits', v, 'remark')]])}</div>
+  <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark')]])}</div>
   ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
-  <div class="card"><h2>Follow-ups</h2><table><thead><tr><th>Step</th><th>Done by</th><th>Date</th><th>Note</th></tr></thead><tbody>${[1, 2, 3, 4].map(i => `<tr><td>Follow-up ${i}</td><td>${esc(who(i))}</td><td>${ed('visits', v, 'fu' + i + 'Date', 'date')}</td><td>${ed('visits', v, 'fu' + i + 'Note')}</td></tr>`).join('')}</tbody></table>
-  ${v.fuRemark || v.paymentNote ? `<p class="muted" style="margin:10px 0 0">${esc([v.fuRemark, v.paymentNote].filter(Boolean).join(' · '))}</p>` : ''}</div>
   ${others.length ? `<div class="card"><h2>Other visits by this number</h2>${others.map(o => `<div style="padding:4px 0"><a data-go="#/visit/${o.id}" style="cursor:pointer;color:var(--accent)">Sr. ${o.sr} · ${fd(o.date)}</a> <span class="muted">· ${esc(vStatus(o)[0])} · ${esc(o.by || '')}</span></div>`).join('')}</div>` : ''}
   </div><div>${dropzone('visit/' + v.id, 'Visit photos & slips')}</div></div>`;
 };
@@ -774,6 +779,7 @@ V.visit = id => {
 V.clients = () => {
   const cols = [
     {k: 'sr', label: 'Sr.', type: 'num', nofilter: true, get: c => c.sr},
+    {k: 'date', label: 'Date', type: 'date', get: clientDate},
     {k: 'name', label: 'Client', nofilter: true, get: c => c.name, cell: c => `<b>${ed('clients', c, 'name')}</b>`},
     {k: 'phone', label: 'Phone', nofilter: true, get: c => c.phone, cell: c => ed('clients', c, 'phone')},
     {k: 'plots', label: 'Plots', nofilter: true, get: c => clientPlots(c).join(', ')},
@@ -786,8 +792,11 @@ V.clients = () => {
     {k: 'final', label: 'Final amount', type: 'money', nofilter: true, totalIf: c => clientStatus(c)[0] === 'Booked', get: clientFinal},
     {k: 'paid', label: 'Paid till now', type: 'money', nofilter: true, get: c => paidOf(clientPayments(c.id)) || null}
   ];
-  const t = tbl('clients', cols, D.clients, {rowGo: c => '#/client/' + c.id, noun: 'clients', order: (a, b) => a.sr - b.sr, totals: ['final', 'paid']});
-  return crumbs([['Files'], ['Clients']]) + `<h1>Clients</h1><p class="sub">One folder per client. The Final amount total counts booked clients only. Paid till now leaves out returned cheques.</p>${t.html}`;
+  const isL = c => clientStatus(c)[0] === 'Lapsed'; const nL = D.clients.filter(isL).length;
+  const rows = listView.clientsLapsed ? D.clients : D.clients.filter(c => !isL(c));
+  const t = tbl('clients', cols, rows, {rowGo: c => '#/client/' + c.id, noun: 'clients', order: (a, b) => String(clientDate(b) || '').localeCompare(String(clientDate(a) || '')) || b.sr - a.sr, totals: ['final', 'paid']});
+  return crumbs([['Files'], ['Clients']]) + `<h1>Clients</h1><p class="sub">One folder per client, newest first. "Date" is the client's latest hold or booking date. The Final amount total counts booked clients only. Paid till now leaves out returned cheques.</p>
+  <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="chip on" style="cursor:default">Booked & on hold <span class="muted">${D.clients.length - nL}</span></span><span class="chip${listView.clientsLapsed ? ' on' : ''}" data-lv="clientsLapsed" data-val="${listView.clientsLapsed ? '' : '1'}">+ Lapsed clients <span class="muted">${nL}</span></span></div>${t.html}`;
 };
 V.client = id => {
   const c = clientById[id]; if (!c) return '<p>Client not found.</p>';
@@ -953,7 +962,7 @@ const addExpenseForm = () => `<div class="card"><h2>New site expense</h2><div cl
 // ---------- Incentives ----------
 V.incentives = () => {
   const t = tbl('incentives', [
-    {k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'by', label: 'Agent', get: x => x.by, multi: x => agentsOf(x.by), cell: x => ed('incentives', x, 'by', 'select', 'agents')},
+    {k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'by', label: 'Agent', get: x => x.by, multi: x => agentsOf(x.by), cell: x => ed('incentives', x, 'by', 'select', 'incAgents')},
     {k: 'client', label: 'Client', get: x => x.client, cell: x => ed('incentives', x, 'client')}, {k: 'plot', label: 'Plot', get: x => x.plot, cell: x => ed('incentives', x, 'plot')},
     {k: 'date', label: 'Booked', type: 'date', get: x => x.bookingDate, cell: x => ed('incentives', x, 'bookingDate', 'date')},
     {k: 'size', label: 'Size', type: 'num', get: x => x.size, cell: x => ed('incentives', x, 'size', 'number')},
@@ -965,7 +974,7 @@ V.incentives = () => {
     {k: 'final', label: 'Final', type: 'money', get: x => x.final, cell: x => `<b>${ed('incentives', x, 'final', 'money')}</b>`},
     {k: 'pend', label: 'Pending', type: 'money', get: x => x.pending, cell: x => ed('incentives', x, 'pending', 'money')}], D.incentives, {totals: ['final', 'pend'], noun: 'rows'});
   const bk = D.bookings.filter(b => b.incentiveStatus || b.incentiveReleased || b.incentivePending);
-  const agents = {}; bk.forEach(b => { const a = b.by || 'Not marked'; const g = agents[a] = agents[a] || {name: a, n: 0, rel: 0, pend: 0}; g.n++; g.rel += b.incentiveReleased || 0; g.pend += b.incentivePending || 0; });
+  const agents = {}; bk.filter(b => !/pratik/i.test(b.by || '')).forEach(b => { const a = b.by || 'Not marked'; const g = agents[a] = agents[a] || {name: a, n: 0, rel: 0, pend: 0}; g.n++; g.rel += b.incentiveReleased || 0; g.pend += b.incentivePending || 0; });
   const a = tbl('incentive-agents', [{k: 'sr', label: 'Sr.', type: 'num', get: g => Object.values(agents).indexOf(g) + 1}, {k: 'name', label: 'Agent', get: g => g.name},
     {k: 'n', label: 'Bookings', type: 'num', get: g => g.n}, {k: 'rel', label: 'Released', type: 'money', get: g => g.rel}, {k: 'pend', label: 'Pending', type: 'money', get: g => g.pend}],
     Object.values(agents).sort((x, y) => y.n - x.n), {totals: ['rel', 'pend'], noun: 'agents'});
@@ -981,7 +990,7 @@ V.history = () => {
   const t = tbl('history', [{k: 'sr', label: 'Sr.', type: 'num', get: e => e.sr}, {k: 'at', label: 'When', type: 'date', get: e => e.at.slice(0, 10), cell: e => `<span style="white-space:nowrap">${new Date(e.at).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</span>`},
     {k: 'user', label: 'By', get: e => e.user, cell: e => `${esc(e.user || '')} <span class="muted">· ${esc(e.role || '')}</span>`}, {k: 'label', label: 'Record', get: e => e.label}, {k: 'field', label: 'Field', get: e => FIELD_LABEL(e.field)},
     {k: 'old', label: 'From', get: e => e.old == null ? null : String(e.old)}, {k: 'new', label: 'To', get: e => e.new == null ? null : String(e.new), cell: e => `<b>${val(e.new)}</b>`},
-    {k: 'act', label: '', nofilter: true, get: () => null, cell: e => e.undoOf ? '<span class="muted">undo</span>' : e.undone ? '<span class="muted">undone</span>' : `<button class="btn small" data-undo="${e.i}">Undo</button>`}], E, {noun: 'changes', order: (a, b) => b.sr - a.sr});
+    {k: 'act', label: '', nofilter: true, get: () => null, cell: e => (e.coll === 'visits' && /^(fu\d|extra|followups)/.test(e.field)) ? '<span class="muted">field removed</span>' : e.undoOf ? '<span class="muted">undo</span>' : e.undone ? '<span class="muted">undone</span>' : `<button class="btn small" data-undo="${e.i}">Undo</button>`}], E, {noun: 'changes', order: (a, b) => b.sr - a.sr});
   const FL = {hold: 'Hold taken', book: 'Plot booked', pay: 'Payment added', lapse: 'Hold lapsed', visit: 'Site visit added', expense: 'Expense added'};
   const steps = store.flows.length ? `<h2 style="font-size:15px;margin:22px 0 8px">Holds, bookings and payments</h2><div class="card" style="padding:6px 14px">${[...store.flows].reverse().map(f => { const c = clientById[f.cid]; const b = f.bid && bookingById[f.bid]; return `<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px"><b>${FL[f.type]}</b> · ${f.type === 'visit' ? esc(f.name || '') : f.type === 'expense' ? esc(f.particulars || '') : ''}${c ? `<a data-go="#/client/${c.id}" style="cursor:pointer;color:var(--accent)">${esc(c.name)}</a>` : ''}${b || f.plot ? ' · plot ' + esc((b && b.plot) || f.plot) : ''}${f.amount ? ' · ' + inr(f.amount) : ''}${f.final ? ' · final ' + inr(f.final) : ''} <span class="muted">· ${esc(f.user || '')} (${esc(f.role)}) · ${new Date(f.at).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</span></div>`; }).join('')}</div>` : '';
   return crumbs([['Admin'], ['Edit history']]) + `<h1>Edit history</h1><p class="sub">Every change, who made it and when.</p>${t.html}${steps}`;
@@ -1083,6 +1092,7 @@ document.addEventListener('click', e => {
   const cm = t.closest('[data-cfmore]'); if (cm) { CF[cm.dataset.cfmore].limit += 200; render(); return; }
   const hl = t.closest('[data-hl]'); if (hl) { const k = hl.dataset.hl; if (!k) plotView.hl.clear(); else if (plotView.hl.has(k)) plotView.hl.delete(k); else plotView.hl.add(k); render(); return; }
   const fl = t.closest('[data-flow]'); if (fl) { flowDlg(fl.dataset); return; }
+  const lv = t.closest('[data-lv]'); if (lv) { listView[lv.dataset.lv] = !!lv.dataset.val; render(); return; }
   const ph = t.closest('[data-phase]'); if (ph) { const k = ph.dataset.phase, o = k === 'after' ? 'before' : 'after'; plotView[k] = !plotView[k]; if (!plotView[k] && !plotView[o]) plotView[o] = true; render(); return; }
   const cs = t.closest('[data-csel]'); if (cs) { clientSel[cs.dataset.cid] = cs.dataset.csel; render(); return; }
   const pv = t.closest('[data-pv]'); if (pv) { plotView.mode = pv.dataset.pv; render(); return; }
@@ -1108,7 +1118,6 @@ function undo(i) {
   if (e.coll === 'visits' && e.field === 'status' && ROLE() === 'Agent' && (e.old === 'Converted' || /done|convert/i.test(e.old || '') || /convert/i.test(e.new || ''))) { toast('Only Admin or Super admin can undo a Converted change.'); return; }
   if (!o) { toast('This record no longer exists.'); return; }
   const ops = [{op: 'patch', coll: e.coll, id: e.id, field: e.field, value: e.old, label: e.label + ' (undo)', undoOf: e.eid}];
-  if (e.coll === 'visits' && /^fu\d/.test(e.field)) { const copy = JSON.parse(JSON.stringify(o)); setF(e.coll, copy, e.field, e.old); ops.push({op: 'patch', coll: 'visits', id: e.id, field: 'followups', value: copy.followups, silent: true}); }
   sendOps(ops).then(() => { setF(e.coll, o, e.field, e.old); e.undone = true; editedSet.delete(e.coll + '|' + e.id + '|' + e.field); render(); toast('Change undone'); }).catch(err => toast(err.message));
 }
 function saveNew(kind) {
@@ -1118,11 +1127,12 @@ function saveNew(kind) {
     if (!name) return err('Enter the visitor name.');
     if (phone && phone.length !== 10) return err('Phone number should have 10 digits.');
     if (!$('#nv_date').value) return err('Enter the visit date.');
-    const st = ($('#dlg .chips[data-group=status] .chip.on') || {}).dataset; const tx = id => $(id).value.trim() || null;
-    const v = {id: 'N' + Date.now(), added: true, row: 0, date: $('#nv_date').value, name, phone: phone || null, by: $('#nv_by').value, status: st ? st.chip : 'Follow up', extra: tx('#nv_extra'), remark: tx('#nv_remark'), followups: null, client: null, source: 'Added in CRM', sr: maxSr(D.visits) + 1};
-    for (let i = 1; i <= 4; i++) { v['fu' + i + 'Date'] = null; v['fu' + i + 'Note'] = null; }
-    v.fu1Date = $('#nv_fu1d').value || null; v.fu1Note = tx('#nv_fu1n');
-    const deal = ($('#dlg .chips[data-group=deal] .chip.on') || {dataset: {}}).dataset.chip; const plot = $('#nv_plot').value; const nn = idn => $(idn).value === '' ? null : Number($(idn).value);
+    const agents = chipVals('agents'); if (!agents.length) return err('Choose at least one agent.');
+    const pick = ($('#dlg .chips[data-group=deal] .chip.on') || {dataset: {}}).dataset.chip || 'Follow up';
+    const deal = pick === 'Hold' ? 'hold' : pick === 'Book' ? 'book' : 'none';
+    const status = pick === 'Hold' ? 'Follow up' : pick === 'Book' ? 'Converted' : pick;
+    const v = {id: 'N' + Date.now(), added: true, row: 0, date: $('#nv_date').value, name, phone: phone || null, by: agents.join(', '), status, remark: $('#nv_remark').value.trim() || null, client: null, source: 'Added in CRM', sr: maxSr(D.visits) + 1};
+    const plot = $('#nv_plot').value; const nn = idn => $(idn).value === '' ? null : Number($(idn).value);
     if (deal !== 'none' && !plot) return err('Choose the plot.');
     if (deal === 'book' && !nn('#nv_final')) return err('Enter the final amount of the plot.');
     const dv = {hamt: nn('#nv_hamt'), hmode: $('#nv_hmode').value, final: nn('#nv_final'), bamt: nn('#nv_bamt'), bmode: $('#nv_bmode').value};

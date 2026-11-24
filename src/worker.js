@@ -23,7 +23,39 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
+  await migrateVisitRemarks(env);
   schemaReady = true;
+}
+
+// One-time change (Nov 2026): site visits keep a single Remark. The old Note, follow-up dates/notes
+// and follow-up remark are folded into it so nothing is lost.
+async function migrateVisitRemarks(env) {
+  const done = await env.DB.prepare("SELECT value FROM meta WHERE key = 'migr_visit_remarks'").first('value');
+  if (done) return;
+  const rows = (await env.DB.prepare("SELECT id, data FROM records WHERE coll = 'visits'").all()).results;
+  const stmts = [];
+  const fd = d => { const m = /^(\d{4})-(\d\d)-(\d\d)/.exec(d || ''); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : (d || ''); };
+  for (const r of rows) {
+    const v = JSON.parse(r.data);
+    const old = ['extra', 'fuRemark', 'paymentNote', 'followups', 'fu1Date', 'fu1Note', 'fu2Date', 'fu2Note', 'fu3Date', 'fu3Note', 'fu4Date', 'fu4Note'];
+    if (!old.some(k => k in v)) continue;
+    const parts = [v.remark, v.extra];
+    for (let i = 1; i <= 4; i++) {
+      const d = v['fu' + i + 'Date'], n = v['fu' + i + 'Note'];
+      if (d || n) parts.push(`FU${i}${d ? ' ' + fd(d) : ''}: ${n || '—'}`);
+    }
+    parts.push(v.fuRemark, v.paymentNote);
+    const seen = new Set();
+    const remark = parts.map(x => (x == null ? '' : String(x).trim())).filter(x => x && !seen.has(x) && seen.add(x)).join(' · ') || null;
+    old.forEach(k => delete v[k]);
+    v.remark = remark;
+    stmts.push(env.DB.prepare("UPDATE records SET data = ?, updated_by = 'update' WHERE coll = 'visits' AND id = ?").bind(JSON.stringify(v), r.id));
+  }
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('migr_visit_remarks', ?)").bind(String(stmts.length)),
+    env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'")
+  ]);
 }
 
 // ---------- helpers ----------
