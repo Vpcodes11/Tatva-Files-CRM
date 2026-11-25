@@ -71,6 +71,12 @@ with sync_playwright() as p:
     ok(len(q("[...document.querySelectorAll('.dlg label')].filter(l => /Refund (amount|mode)/.test(l.textContent) && !l.querySelector('.lk'))")) == 2, 'refund amount and mode can be changed with the pencil'); a.click('[data-dlgclose]')
     a.click('[data-refund]'); a.wait_for_timeout(1200); reload(h2)
     ok(q(f"D.bookings.find(x => x.cid === '{cid2}').refunded") == 'Not Refunded' and q(f"!!lockReason('bookings', D.bookings.find(x => x.cid === '{cid2}'), 'refundMode')"), 'switch off → Not refunded, refund amount / mode locked again')
+    # "+ Add payment" sits next to the Payments heading, not at the top of the folder
+    go(h)
+    ok(q("[...document.querySelectorAll('[data-flow=pay]')].length") == 1 and q("document.querySelector('[data-flow=pay]').parentElement.querySelector('h2').textContent.startsWith('Payments')"), '"+ Add payment" is next to the Payments heading')
+    ok(not q("[...document.querySelectorAll('#view > .row button')].some(x => x.textContent.includes('Add payment'))") and q("[...document.querySelectorAll('#view > .row button')].some(x => x.textContent.includes('Hold another plot'))"), 'top of the folder keeps "+ Hold another plot" only')
+    n0 = q(f"clientPayments('{cid}').length"); a.click('[data-flow=pay]'); a.fill('#fp_amt', '5000'); a.click('[data-dlgok]'); a.wait_for_timeout(1300)
+    ok(q(f"clientPayments('{cid}').length") == n0 + 1, 'it still adds a payment')
     # "How this folder was put together": no longer a card on the side, a closed line at the bottom
     go(h)
     ok(not q("[...document.querySelectorAll('.card h2')].some(x => x.textContent.includes('How this folder'))"), '"How this folder was put together" is no longer a card')
