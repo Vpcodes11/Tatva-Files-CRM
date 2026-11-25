@@ -22,10 +22,12 @@ with sync_playwright() as p:
     ok(labels('.stats .stat small') == ['Plot no.', 'Plot size', 'Price per sq yd', 'Final amount', 'Paid till now', 'Remaining balance', 'Document status'], 'top blocks in the agreed order: %s' % labels('.stats .stat small'))
     ok(labels('.acts button') == ['Booked', 'Lapsed'], 'hold buttons are now "Booked" and "Lapsed"')
     grids = q("[...document.querySelectorAll('.pcols > div:first-child .grid2.g3')].map(g => [...g.querySelectorAll('.kv small')].map(s => s.textContent))")
-    ok(grids[0] == ['Hold date', 'Hold amount', 'Hold mode', 'Refund', 'Refund amount', 'Refund mode', 'Booking date', 'Booking amount', 'Booking mode'] and grids[1] == ['DP date', 'DP amount', 'DP mode'], 'Hold and booking rows: hold · refund · booking · DP (%s)' % grids[:2])
+    ok(grids[0] == ['Hold date', 'Hold amount', 'Hold mode', 'Refund', 'Refund amount', 'Refund mode', 'Booking date', 'Booking amount', 'Booking mode'] and grids[1] == ['DP date', 'DP amount', 'DP mode', 'Loan', 'Loan amount', 'EMI'], 'Hold and booking rows: hold · refund · booking · DP · loan (%s)' % grids[:2])
     ok(q("getComputedStyle(document.querySelector('.grid2.g3')).gridTemplateColumns.split(' ').length") == 3, 'rows are 3 columns wide')
     ok(q("!!document.querySelector('.pcols > div:last-child .psub') && document.querySelector('.pcols > div:last-child .psub').textContent.includes('MOU')"), 'MOU and dastavej sit on the right side')
-    ok(q("document.querySelector('[data-refund]').disabled") and q(f"!!lockReason('bookings', D.bookings.find(x => x.cid === '{cid}'), 'refundAmount')"), 'refund switch is off and locked while the plot is on hold')
+    ok(not q("!!document.querySelector('[data-refund]')") and 'Only if the hold lapses' in q("document.querySelector('.pcols').innerText") and 'locked' not in q("document.querySelector('.pcols').innerText"), 'on hold: no greyed-out refund switch or red "locked" labels, just "Only if the hold lapses"')
+    txt = q("document.querySelector('#view').innerText")
+    ok('Final amount and loan' not in txt and 'Payment status' not in txt, 'the "Final amount and loan" group and Payment status are gone')
 
     # book it: booking amount goes into Booking date / amount / mode, not DP
     a.click('.acts [data-flow=book]'); a.fill('#fb_final', '1100000'); a.fill('#fb_amt', '100000'); a.select_option('#fb_mode', 'UPI'); a.click('[data-dlgok]'); a.wait_for_timeout(1500); reload(h)
@@ -35,6 +37,13 @@ with sync_playwright() as p:
     ok(stat('Final amount') == '₹11,00,000' and stat('Price per sq yd') == q(f"inr(Math.round(1100000 / {area}))"), 'Price per sq yd = final amount ÷ plot size (%s for %s sq yd)' % (stat('Price per sq yd'), area))
     ok(stat('Paid till now') == '₹1,01,100' and stat('Remaining balance') == '₹9,98,900', 'Paid till now (hold + booking) and Remaining balance: %s / %s' % (stat('Paid till now'), stat('Remaining balance')))
 
+    # Final amount is edited with the pencil on its top block; price per sq yd and balance follow
+    a.click('.stats .stat small .pen >> nth=0'); a.wait_for_timeout(200)
+    ok(q("document.querySelector('.dlg label').textContent").startswith('Final amount'), 'pencil on the Final amount block opens Final amount')
+    a.fill('.dlg input', '1200000'); a.click('[data-dlgok]'); a.wait_for_timeout(1000); reload(h)
+    ok(stat('Final amount') == '₹12,00,000' and stat('Price per sq yd') == q(f"inr(Math.round(1200000 / {area}))") and stat('Remaining balance') == '₹10,98,900', 'Final amount changed → price per sq yd and balance updated (%s, %s)' % (stat('Price per sq yd'), stat('Remaining balance')))
+    a.click('.stats .stat small .pen >> nth=0'); a.fill('.dlg input', '1100000'); a.click('[data-dlgok]'); a.wait_for_timeout(1000); reload(h)
+    ok(q(f"D.bookings.find(x => x.cid === '{cid}').loan") == 'Not Availed', 'Booked without a loan saves "Not Availed"')
     # two DP payments: total shown, hover lists them, they count as payments
     for amt, mode, note in [('200000', 'Cheque', '1st instalment'), ('150000', 'Cash', '2nd instalment')]:
         a.click('[data-flow=dp]'); a.fill('#fd_amt', amt); a.select_option('#fd_mode', mode); a.fill('#fd_note', note); a.click('[data-dlgok]'); a.wait_for_timeout(1300)
