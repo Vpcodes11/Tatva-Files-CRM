@@ -144,6 +144,14 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .danger{color:var(--lapsed)!important;border-color:#e7c9c4!important}
 .dlg .df .left{margin-right:auto}
 .clip{display:inline-block;max-width:320px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
+.rmk{display:flex;flex-direction:column;gap:3px;max-width:400px;font-size:12.5px;line-height:1.35}
+.rmk>div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink3)}
+.rmk>div.last{color:var(--ink)}
+.rmk.full{max-width:none}.rmk.full>div{white-space:normal}
+.rmk .nt{font-style:italic}
+.fu{display:inline-block;min-width:30px;text-align:center;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:9px;margin-right:2px;background:var(--accent-bg);color:var(--accent);vertical-align:1px}
+.fu.f3{background:var(--diff-bg);color:var(--diff)}.fu.f4{background:var(--ink);color:var(--panel)}
+.fu-d{color:var(--ink3);margin-right:2px;white-space:nowrap}
 .acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--hold-bg);border-radius:8px;padding:8px 10px;margin:0 0 12px;font-size:13px}.acts span{flex:1;min-width:160px;color:var(--hold)}
 .note{font-size:12.5px;color:var(--ink2);background:var(--accent-bg);border-radius:8px;padding:9px 12px;margin-bottom:14px}
 .split{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px;align-items:start}
@@ -355,6 +363,24 @@ function visitSrs() {
   return m;
 }
 const visitSrLabel = (v, m = visitSrs()) => (isLapsedVisit(v) ? 'Lapsed Sr. ' : 'Follow up Sr. ') + (m.get(v.id) || '—');
+// The Remark holds the old follow-up notes as "FU1 21/07/26: note · FU2: note · …". remarkHtml() shows each follow-up
+// on its own line (FU label, short date, note), with plain notes before and after. The saved text is not changed.
+const FU_RE = /^FU([1-4])(?:\s+(\d\d)\/(\d\d)\/(\d\d))?\s*:\s*([\s\S]*)$/;
+function remarkParts(r) {
+  const out = {before: [], fus: [], after: []};
+  String(r || '').split(' · ').map(x => x.trim()).filter(Boolean).forEach(x => { const m = FU_RE.exec(x);
+    if (m) out.fus.push({n: +m[1], date: m[2] ? `${+m[2]} ${MONTHS[+m[3] - 1] || m[3]} ${m[4]}` : null, text: m[5]}); else (out.fus.length ? out.after : out.before).push(x); });
+  return out;
+}
+function remarkHtml(r, full) {
+  if (!r) return '<span class="muted">—</span>';
+  const p = remarkParts(r); if (!p.fus.length) return full ? `<div class="rmk full"><div class="last">${esc(r)}</div></div>` : `<span class="muted clip">${esc(r)}</span>`;
+  const who = n => full && n >= 3 ? ` <span class="muted">(${n === 3 ? 'Sahil Bhai' : 'Pratik Sir'})</span>` : '';
+  const lines = [...p.before.map(x => `<div>${esc(x)}</div>`),
+    ...p.fus.map((f, i) => `<div${i === p.fus.length - 1 ? ' class="last"' : ''}><span class="fu f${f.n}">FU${f.n}</span> ${f.date ? `<span class="fu-d">${f.date}</span> ` : ''}${esc(f.text || '—')}${who(f.n)}</div>`),
+    ...p.after.map(x => `<div class="nt">${esc(x)}</div>`)];
+  return `<div class="rmk${full ? ' full' : ''}"${full ? '' : ` title="${esc(r)}"`}>${lines.join('')}</div>`;
+}
 const fuFromRemark = v => { const m = String(v.remark || '').match(/FU([1-4])/g); return m ? Math.max(...m.map(x => +x[2])) : 1; };
 function vStatus(v) {
   const c = v.client && clientById[v.client];
@@ -707,7 +733,7 @@ V.visits = () => {
     {k: 'phone', label: 'Phone', nofilter: true, get: v => v.phone, cell: v => ed('visits', v, 'phone')},
     {k: 'by', label: 'Agent', get: v => v.by, multi: v => agentsOf(v.by), cell: v => ed('visits', v, 'by', 'select', 'agents')},
     {k: 'status', label: 'Status', order: VISIT_STATUSES, get: v => vStatus(v)[0], cell: v => ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${vStatus(v)[1]}">${vStatus(v)[0]}</span>`)},
-    {k: 'remark', label: 'Remark', nofilter: true, get: v => v.remark, cell: v => `<span class="muted clip">${val(v.remark)}</span>`}
+    {k: 'remark', label: 'Remark', nofilter: true, get: v => v.remark, cell: v => remarkHtml(v.remark)}
   ];
   const lapsedVisits = D.visits.filter(isLapsedVisit);
   const noVisit = D.clients.filter(c => clientLapsed(c) && !D.visits.some(v => v.client === c.id)).length;
@@ -830,7 +856,7 @@ V.visit = id => {
   return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
   <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">${visitSrLabel(v, vsr)}</p>
   <div class="split"><div>
-  <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark')]])}</div>
+  <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark', 'text', '', remarkHtml(v.remark, true))]])}</div>
   ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
   ${others.length ? `<div class="card"><h2>Other visits by this number</h2>${others.map(o => `<div style="padding:4px 0"><a data-go="#/visit/${o.id}" style="cursor:pointer;color:var(--accent)">${visitSrLabel(o, vsr)} · ${fd(o.date)}</a> <span class="muted">· ${esc(vStatus(o)[0])} · ${esc(o.by || '')}</span></div>`).join('')}</div>` : ''}
   </div><div>${dropzone('visit/' + v.id, 'Visit photos & slips')}</div></div>`;
