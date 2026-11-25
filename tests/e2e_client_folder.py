@@ -22,7 +22,10 @@ with sync_playwright() as p:
     ok(labels('.stats .stat small') == ['Plot no.', 'Plot size', 'Price per sq yd', 'Final amount', 'Paid till now', 'Remaining balance', 'Document status'], 'top blocks in the agreed order: %s' % labels('.stats .stat small'))
     ok(labels('.acts button') == ['Booked', 'Lapsed'], 'hold buttons are now "Booked" and "Lapsed"')
     grids = q("[...document.querySelectorAll('.pcols > div:first-child .grid2.g3')].map(g => [...g.querySelectorAll('.kv small')].map(s => s.textContent))")
-    ok(len(grids) == 1 and grids[0] == ['Hold date', 'Hold amount', 'Hold mode', 'Refund', 'Refund amount', 'Refund mode', 'Booking date', 'Booking amount', 'Booking mode', 'DP date', 'DP amount', 'DP mode', 'Loan', 'Loan amount', 'EMI'], 'Hold and booking rows: hold · refund · booking · DP · loan (%s)' % grids)
+    ok(len(grids) == 1 and grids[0] == ['Hold date', 'Hold amount', 'Hold mode', 'Booking date', 'Booking amount', 'Booking mode', 'Cheque name', 'Cheque number', 'Bank name', 'DP date', 'DP amount', 'DP mode'], 'left side rows: hold · booking · cheque · DP (%s)' % grids)
+    right = q("[...document.querySelectorAll('.pcols > div:last-child .psub')].map(x => x.textContent.trim())")
+    rgrid = q("[...document.querySelectorAll('.pcols > div:last-child .grid2.g3')[1].querySelectorAll('.kv small')].map(s => s.textContent)")
+    ok(right == ['MOU and dastavej', 'Refund and loan'] and rgrid == ['Refund', 'Refund amount', 'Refund mode', 'Loan', 'Loan amount', 'EMI'], 'right side: MOU and dastavej, then Refund and loan underneath (%s / %s)' % (right, rgrid))
     ok(q("document.querySelector('.pcols').closest('.card').querySelector(':scope > h2 .pen')") is None, 'no stray pencil next to the plot title')
     ok(q("getComputedStyle(document.querySelector('.grid2.g3')).gridTemplateColumns.split(' ').length") == 3, 'rows are 3 columns wide')
     ok(q("!!document.querySelector('.pcols > div:last-child .psub') && document.querySelector('.pcols > div:last-child .psub').textContent.includes('MOU')"), 'MOU and dastavej sit on the right side')
@@ -38,6 +41,14 @@ with sync_playwright() as p:
     ok(stat('Final amount') == '₹11,00,000' and stat('Price per sq yd') == q(f"inr(Math.round(1100000 / {area}))"), 'Price per sq yd = final amount ÷ plot size (%s for %s sq yd)' % (stat('Price per sq yd'), area))
     ok(stat('Paid till now') == '₹1,01,100' and stat('Remaining balance') == '₹9,98,900', 'Paid till now (hold + booking) and Remaining balance: %s / %s' % (stat('Paid till now'), stat('Remaining balance')))
 
+    # cheque details row: edited with the Hold and booking pencil
+    a.click('.pcols > div:first-child .psub .pen'); a.wait_for_timeout(200)
+    labs = q("[...document.querySelectorAll('.dlg label')].map(l => l.childNodes[0].textContent.trim())")
+    ok(all(x in labs for x in ['Cheque name', 'Cheque number', 'Bank name']), 'Hold and booking pencil includes the cheque details')
+    for lab, val in [('Cheque name', 'Folder Test'), ('Cheque number', '004512'), ('Bank name', 'HDFC')]:
+        a.fill(f"xpath=//div[@class='dlg' or contains(@class,'dlg ')]//label[starts-with(normalize-space(.), '{lab}')]//input", val)
+    a.click('[data-dlgok]'); a.wait_for_timeout(1000); reload(h)
+    ok(q(f"(() => {{ const b = D.bookings.find(x => x.cid === '{cid}'); return [b.chequeName, b.chequeNumber, b.chequeBank]; }})()") == ['Folder Test', '004512', 'HDFC'], 'cheque name, number and bank are saved')
     # Final amount is edited with the pencil on its top block; price per sq yd and balance follow
     a.click('.stats .stat small .pen >> nth=0'); a.wait_for_timeout(200)
     ok(q("document.querySelector('.dlg label').textContent").startswith('Final amount'), 'pencil on the Final amount block opens Final amount')
@@ -67,7 +78,7 @@ with sync_playwright() as p:
     a.click('[data-refund]'); a.wait_for_timeout(1200); reload(h2)
     r = q(f"(() => {{ const b = D.bookings.find(x => x.cid === '{cid2}'); return [b.refunded, b.refundAmount, b.refundMode, !!lockReason('bookings', b, 'refundAmount')]; }})()")
     ok(r == ['Refunded', 1100, 'Cash', False], 'switch on → Refunded; refund amount / mode filled from the hold and editable: %s' % r)
-    a.click('.pcols > div:first-child .psub .pen'); a.wait_for_timeout(200)
+    a.click('.pcols > div:last-child .psub:has-text("Refund and loan") .pen'); a.wait_for_timeout(200)
     ok(len(q("[...document.querySelectorAll('.dlg label')].filter(l => /Refund (amount|mode)/.test(l.textContent) && !l.querySelector('.lk'))")) == 2, 'refund amount and mode can be changed with the pencil'); a.click('[data-dlgclose]')
     a.click('[data-refund]'); a.wait_for_timeout(1200); reload(h2)
     ok(q(f"D.bookings.find(x => x.cid === '{cid2}').refunded") == 'Not Refunded' and q(f"!!lockReason('bookings', D.bookings.find(x => x.cid === '{cid2}'), 'refundMode')"), 'switch off → Not refunded, refund amount / mode locked again')
