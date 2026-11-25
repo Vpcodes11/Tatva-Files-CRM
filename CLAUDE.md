@@ -19,9 +19,9 @@ Live: https://tatva-crm.vaistack-cs.workers.dev — every push to `main` deploys
 ## Business rules (agreed with the owner — keep them)
 - Roles: **Agent** (everything in Files except changing a Converted visit/booking), **Admin** (+ users, export), **Super admin** (+ delete/restore, other Super admins). The server enforces these, not only the screen.
 - Flow: site visit → Hold (₹1,100 default, creates the client folder, plot = Hold) → Book (final amount, down payment; plot = Sold, visit = Converted, doc status "MOU not done") → payments → or Hold lapsed (plot back to Unsold, refund yes/no).
-- **One source of truth**: a plot's status and owner come from its booking (Converted → Sold & owned; active hold → Hold). A visit linked to a client folder takes the folder's status (Booked → Converted, On hold → Hold, Lapsed → Lapsed). Lists, menu counts and modules must always agree — the owner checks this closely.
-- Visit statuses: Follow up 1–4, Hold, Converted, Not interested, Lapsed. One Remark per visit (old follow-up notes were folded into it, "FU1 dd/mm/yy: …"). Visits can have several agents ("A, B").
-- Clients list: newest first; Booked / On hold / Lapsed buttons. Site visits has a Lapsed tab = the same lapsed clients.
+- **One source of truth**: a plot's status and owner come from its booking (Converted → Sold & owned; active hold → Hold). A visit linked to a client folder takes the folder's status (Booked → Converted, On hold → Hold, Lapsed → Lapsed); the one exception is a lapsed client's visit put back on Follow up (`reopened` on the visit; a new hold clears it). Lists, menu counts and modules must always agree — the owner checks this closely.
+- Visit statuses: Follow up 1–4, Hold, Converted, Lapsed ("Not interested" was renamed Lapsed; old `NOT INTERESTED` values show as Lapsed). One Remark per visit (old follow-up notes were folded into it, "FU1 dd/mm/yy: …"). Visits can have several agents ("A, B").
+- Clients list: newest first; Booked / On hold / Lapsed buttons. Site visits has two tabs: **Follow up** (every visit that isn't Lapsed; = the menu count) and **Lapsed** (visits marked Lapsed + visits of lapsed clients). Setting a visit to Lapsed moves it to the Lapsed tab; setting it to a Follow up moves it back.
 - Plots: TRPL plots and "Before TRPL" plots have separate Sr. series. Pratik is not shown in Incentives.
 - Export (Excel/CSV, per list and "Export all") is Admin/Super admin only — files contain client phone numbers.
 - Don't add file uploads yet (needs R2 + payment card). Don't add Meta/99acres/newsletters.

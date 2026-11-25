@@ -70,7 +70,7 @@ with sync_playwright() as p:
     ok(st==['Booked',1500000,351100,'SOLD OUT',cid,'MOU not done'], 'booking and payment saved: %s'%st)
     vconv=a.evaluate("s => __dbg(s)", "vStatus(D.visits.find(v=>v.name==='Agent Walkin'))[0]"); ok(vconv=='Converted','visit became Converted after booking')
     # agent now cannot change that visit
-    r=g.evaluate("s => __dbg(s)", """fetch('/api/ops',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ops:[{op:'patch',coll:'visits',id:'%s',field:'status',value:'Not interested'}]})}).then(r=>r.status)"""%a.evaluate("s => __dbg(s)", "D.visits.find(v=>v.name==='Agent Walkin').id"))
+    r=g.evaluate("s => __dbg(s)", """fetch('/api/ops',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ops:[{op:'patch',coll:'visits',id:'%s',field:'status',value:'Lapsed'}]})}).then(r=>r.status)"""%a.evaluate("s => __dbg(s)", "D.visits.find(v=>v.name==='Agent Walkin').id"))
     ok(r==403,'Agent blocked from changing the newly Converted visit')
     # hold + lapse
     a.click('[data-flow=hold]'); p2=a.evaluate("s => __dbg(s)", "freePlots()[0].no"); a.select_option('#fh_plot',p2); a.click('[data-dlgok]'); a.wait_for_timeout(1200)

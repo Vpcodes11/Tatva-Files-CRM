@@ -21,9 +21,10 @@ with sync_playwright() as p:
     ok(a.evaluate(E, "D.bookings.filter(isConvertedBooking).every(b => !b.plot || clientById[plotOwner[b.plot]] && clientById[plotOwner[b.plot]].bookings.includes(b.id))"), 'every Converted booking’s plot belongs to that client')
     held = a.evaluate(E, "new Set(D.clients.filter(c => clientStatus(c)[0] === 'On hold').flatMap(c => c.bookings.map(id => bookingById[id]).filter(b => /hold/i.test(b.outcome || '') && b.plot).map(b => b.plot))).size")
     ok(held == a.evaluate(E, "Object.values(D.plots).filter(p => plotClass(p)[1] === 'Hold').length"), 'plots held by On hold clients = Hold plots (%d)' % held)
-    nL = a.evaluate(E, "D.clients.filter(c => clientStatus(c)[0] === 'Lapsed').length")
+    nL = a.evaluate(E, "D.visits.filter(v => vStatus(v)[0] === 'Lapsed').length")
     a.evaluate(E, "location.hash='#/visits'"); a.wait_for_timeout(300); a.click('[data-lv=visitsLapsed][data-val="1"]'); a.wait_for_timeout(300)
-    ok(a.evaluate(E, "TABLES['visits-lapsed'].rows.length") == nL, 'Lapsed in Site visits = Lapsed in Clients (%d)' % nL)
+    ok(a.evaluate(E, "TABLES['visits-lapsed'].rows.length") == nL and nav('visits') + nL == a.evaluate(E, "D.visits.length"), 'Follow up (%d) + Lapsed (%d) = all visits' % (nav('visits'), nL))
+    ok(a.evaluate(E, "D.clients.filter(clientLapsed).every(c => D.visits.filter(v => v.client === c.id).every(v => vStatus(v)[0] === 'Lapsed' || v.reopened))"), 'a lapsed client’s visits are Lapsed unless moved back to Follow up')
     # pencil can't make a plot disagree with its booking
     pl = a.evaluate(E, "D.bookings.find(isConvertedBooking).plot")
     a.evaluate(E, f"location.hash='#/plot/{pl}'"); a.wait_for_timeout(300)

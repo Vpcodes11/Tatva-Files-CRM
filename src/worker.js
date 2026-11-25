@@ -102,6 +102,16 @@ async function currentUser(env, req) {
 // The same lock rules the screen shows: an Agent cannot change a Converted visit or booking.
 const isConvertedVisitStatus = s => { const x = String(s || '').toUpperCase(); return !x.includes('NOT') && !x.includes('FOLLOW') && (x === 'DONE' || x.includes('CONVERT')); };
 const isConvertedOutcome = s => /convert/i.test(String(s || ''));
+// Same rule as clientStatus() in index.html: Lapsed = has bookings, none Converted and none on hold.
+async function clientIsLapsed(client, getRec) {
+  const ids = Array.isArray(client.bookings) ? client.bookings : [];
+  if (!ids.length) return false;
+  for (const id of ids) {
+    const o = String(((await getRec('bookings', id)) || {}).outcome || '').toLowerCase();
+    if (o.startsWith('convert') || o.includes('hold')) return false;
+  }
+  return true;
+}
 function lockError(user, coll, current, next) {
   if (user.role !== 'Agent') return null;
   if (coll === 'visits' && current && isConvertedVisitStatus(current.status) && next && !isConvertedVisitStatus(next.status))
@@ -229,9 +239,21 @@ async function apiOps(env, req, user) {
       const cur = working[key] || await getRec(op.coll, op.id);
       if (!cur) return fail(404, 'This record no longer exists. Refresh the page.');
       const next = {...cur, [op.field]: op.value === undefined ? null : op.value};
-      if (op.coll === 'visits' && op.field === 'status' && cur.client)
-        return fail(403, 'This visit is linked to a client folder, so its status follows the folder. Change it from the client folder.');
-      const lock = lockError(user, op.coll, cur, next);
+      let lapsedVisit = false; // a lapsed client's visit shows as Lapsed, whatever the old sheet status (e.g. DONE) says
+      if (op.coll === 'visits' && op.field === 'status' && cur.client) {
+        // A visit in a client folder follows the folder. Only a lapsed client's visit can be moved
+        // back to Follow up (or to Lapsed again); `reopened` records that choice.
+        const client = await getRec('clients', cur.client);
+        if (client) {
+          if (!(await clientIsLapsed(client, getRec)))
+            return fail(403, 'This visit is linked to a client folder, so its status follows the folder. Change it from the client folder.');
+          if (!/^(follow up [1-4]|lapsed)$/i.test(String(op.value || '')))
+            return fail(403, 'This client\'s hold lapsed. Their visit can only be set to a Follow up or Lapsed.');
+          next.reopened = /^follow/i.test(op.value);
+          lapsedVisit = true;
+        }
+      }
+      const lock = lapsedVisit ? null : lockError(user, op.coll, cur, next);
       if (lock) return fail(403, lock);
       working[key] = next;
       stmts.push(env.DB.prepare('UPDATE records SET data = ?, updated_at = ?, updated_by = ? WHERE coll = ? AND id = ?')
