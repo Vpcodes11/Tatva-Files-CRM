@@ -74,6 +74,12 @@ h1{font-size:22px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
 .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 22px}
 .srcinfo{margin:18px 0 4px;font-size:12.5px;color:var(--ink2)}.srcinfo summary{cursor:pointer;color:var(--ink3);font-size:12px;user-select:none}.srcinfo summary:hover{color:var(--accent)}
 .srcinfo>div{padding:3px 0 3px 14px}
+.amtw{display:block;font-size:11.5px;color:var(--accent);margin-top:3px;min-height:0}
+.dlg .sec2{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);margin:4px 0 -4px;padding-top:10px;border-top:1px solid var(--line)}.dlg .db>.sec2:first-child{border-top:none;padding-top:0;margin-top:0}
+.dlg .g2{align-items:start}
+.bsum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;background:var(--accent-bg);border-radius:8px;padding:10px 12px}
+.bsum small{display:block;font-size:11px;color:var(--ink3)}.bsum b{font-size:14px}
+@media(max-width:560px){.bsum{grid-template-columns:1fr 1fr}}
 .grid2.g3{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px}
 
 .pcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 32px}.pcols>div{min-width:0}
@@ -336,12 +342,13 @@ function applyFlow(f) {
     if (f.amount) D.payments.push(newPay(f, 'Hold amount · plot ' + f.plot, f.amount, f.mode, [f.plot], c.id));
   } else if (f.type === 'book') {
     const b = D.bookings.find(x => x.id === f.bid); if (!b) return;
-    Object.assign(b, {outcome: 'Booked', finalAmount: f.final, bookingAmount: f.amount || null, bookingDate: f.date, bookingMode: f.mode, loan: f.loan, loanAmount: f.loanAmount || null, emi: f.emi || null});
+    Object.assign(b, {outcome: 'Booked', finalAmount: f.final, bookingAmount: f.amount || null, bookingDate: f.date, bookingMode: f.mode, loan: f.loan, loanBank: f.loanBank || null, loanAmount: f.loanAmount || null, emi: f.emi || null});
     if (P[b.plot]) P[b.plot].status = 'SOLD OUT';
     D.plotOwners[b.plot] = f.cid;
     const c = D.clients.find(x => x.id === f.cid); if (c && !c.docStatus) c.docStatus = 'MOU not done';
     const v = D.visits.find(x => x.id === f.vid); if (v) v.status = 'Booked';
     if (f.amount) D.payments.push(newPay(f, 'Booking amount · plot ' + b.plot, f.amount, f.mode, [b.plot], f.cid));
+    if (f.dp && f.dp.amount) { const dp = newPay({...f.dp, note: null}, 'Down payment (DP) · plot ' + b.plot, f.dp.amount, f.dp.mode, [b.plot], f.cid); dp.dpOf = b.id; D.payments.push(dp); }
   } else if (f.type === 'pay') {
     const np = newPay(f, f.text || 'Payment' + (f.plot ? ' · plot ' + f.plot : ''), f.amount, f.mode, f.plot ? [f.plot] : [], f.cid);
     if (f.dpOf) np.dpOf = f.dpOf; // a down payment (DP) instalment of this booking
@@ -513,7 +520,7 @@ const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 const PEN_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const FIELD_LABELS = {date: 'Date', name: 'Name', phone: 'Phone', by: 'Agent', status: 'Status', extra: 'Note', remark: 'Remark', docStatus: 'Document status',
   holdDate: 'Hold date', holdAmount: 'Hold amount', holdMode: 'Hold mode', bookingAmount: 'Booking amount', bookingMode: 'Booking mode', refundAmount: 'Refund amount', refundMode: 'Refund mode', dpMode: 'DP mode', refunded: 'Refund', finalAmount: 'Final amount', dpAmount: 'DP amount', dpDate: 'DP date',
-  loan: 'Loan', loanAmount: 'Loan amount', emi: 'EMI', payment: 'Payment status', mou: 'MOU', dastavejStatus: 'Dastavej status', maintenanceCheque: 'Maintenance cheque', outcome: 'Booking status',
+  loan: 'Loan', loanBank: 'Bank', loanAmount: 'Loan amount', emi: 'EMI', payment: 'Payment status', mou: 'MOU', dastavejStatus: 'Dastavej status', maintenanceCheque: 'Maintenance cheque', outcome: 'Booking status',
   client: 'Client name', onlineCheque: 'Online / cheque', cash: 'Cash', fy: 'Financial year', kind: 'Type', vakilAmount: 'Vakil fee', vakilDate: 'Vakil date', maintenanceAmount: 'Maintenance deposit', maintenanceDate: 'Deposit date',
   owner: 'Owner', plot: 'Plot', sqYard: 'Sq yard', saleValue: 'Total sale value', anjaneePaid: 'Anjanee paid', area: 'Area (sq yd)', note: 'Note', particulars: 'Particulars', for: 'For', type: 'Type', amount: 'Amount', method: 'Paid by', remarks: 'Remarks',
   text: 'Entry', mode: 'Mode', particular: 'Particular', advance: 'Advance', bookingDate: 'Booking date', final: 'Final incentive', pending: 'Pending', sellAmount: 'Sell amount', size: 'Size', slab: 'Slab'};
@@ -551,10 +558,18 @@ function addPencils(root) {
 }
 const closeDlg = () => { $('#dlg').innerHTML = ''; dlgSave = null; };
 let dlgSave = null;
+// Money boxes: numbers only (no letters or minus), with the amount in rupees shown underneath (₹11,00,000).
+const AMT_ATTR = 'type="text" inputmode="numeric" class="amt" autocomplete="off"';
+function amtHint(t) {
+  const d = t.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1').replace(/^0+(?=\d)/, ''); if (d !== t.value) t.value = d; // digits (and one decimal point for old amounts like 1234.5)
+  let h = t.nextElementSibling; if (!h || !h.classList.contains('amtw')) { h = document.createElement('small'); h.className = 'amtw'; t.after(h); }
+  h.textContent = d && Number(d) >= 1000 ? inr(d) : '';
+}
+document.addEventListener('input', e => { if (e.target.classList && e.target.classList.contains('amt')) amtHint(e.target); });
 const openDlg = (title, subtitle, body, saveLabel, onSave, wide) => {
   $('#dlg').innerHTML = `<div class="dbg" data-dlgbg><div class="dlg${wide ? ' wide' : ''}" role="dialog" aria-modal="true"><div class="dh"><div><h3>${title}</h3>${subtitle ? `<small>${subtitle}</small>` : ''}</div><button class="dx" data-dlgclose aria-label="Close">×</button></div>
   <div class="db">${body}<div class="err" id="dlg_err"></div></div><div class="df"><button class="btn" data-dlgclose>Cancel</button><button class="btn primary" data-dlgok>${saveLabel}</button></div></div></div>`;
-  dlgSave = onSave; const f = $('#dlg').querySelector('input,select,textarea'); if (f) { f.focus(); if (f.select && f.type !== 'date') try { f.select(); } catch (x) {} }
+  dlgSave = onSave; document.querySelectorAll('#dlg .amt').forEach(amtHint); const f = $('#dlg').querySelector('input,select,textarea'); if (f) { f.focus(); if (f.select && f.type !== 'date') try { f.select(); } catch (x) {} }
 };
 document.addEventListener('click', e => {
   const t = e.target;
@@ -585,7 +600,8 @@ document.addEventListener('click', e => {
       const curLabel = opt === 'visitStatus' ? vStatus(o)[0] : shownCur;
       input = `<select id="${nm}"${dis}><option value="">—</option>${opts.map(x => `<option ${x === curLabel ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
     } else if (kind === 'date' && (!cur || isISO(cur))) input = `<input id="${nm}" type="date" value="${esc(cur || '')}"${dis}>`;
-    else if (kind === 'money' || kind === 'number') input = `<input id="${nm}" type="number" step="any" value="${cur ?? ''}"${dis}>`;
+    else if (kind === 'money') input = `<input id="${nm}" ${AMT_ATTR} value="${cur ?? ''}"${dis}>`;
+    else if (kind === 'number') input = `<input id="${nm}" type="number" step="any" value="${cur ?? ''}"${dis}>`;
     else if (String(cur ?? '').length > 60 || /^remarks?$/.test(f)) input = `<textarea id="${nm}" rows="3"${dis}>${esc(cur ?? '')}</textarea>`;
     else input = `<input id="${nm}" type="text" value="${esc(cur ?? '')}"${dis}>`;
     return {coll, id, f, kind, o, nm, html: `<label>${esc(label)}${input}${dis ? `<span class="lk">${esc(s.dataset.lock)}</span>` : ''}</label>`, lock: !!dis, initial: null};
@@ -806,8 +822,8 @@ const openAddVisit = () => {
   <label>Status${chips('deal', ['Follow up', ...(ROLE() !== 'Agent' ? ['Booked'] : []), 'Lapsed', 'Hold', 'Book'], 'Follow up')}</label>
   <div id="nv_deal" style="display:none;gap:12px">
     <label>Plot * <span class="muted">(unsold plots only)</span><select id="nv_plot"><option value="">Choose a plot</option>${freePlots().map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
-    <div class="g2" id="nv_holdf"><label>Hold amount<input id="nv_hamt" type="number" value="1100"></label><label>Hold paid by${modeSel('nv_hmode', 'Cash')}</label></div>
-    <div class="g2" id="nv_bookf"><label>Final amount *<input id="nv_final" type="number" placeholder="Agreed price"></label><label>Booking amount<input id="nv_bamt" type="number"></label><label>Paid by${modeSel('nv_bmode', 'Cheque')}</label></div>
+    <div class="g2" id="nv_holdf"><label>Hold amount<input id="nv_hamt" type="text" inputmode="numeric" class="amt" autocomplete="off" value="1100"></label><label>Hold paid by${modeSel('nv_hmode', 'Cash')}</label></div>
+    <div class="g2" id="nv_bookf"><label>Final amount *<input id="nv_final" type="text" inputmode="numeric" class="amt" autocomplete="off" placeholder="Agreed price"></label><label>Booking amount<input id="nv_bamt" type="text" inputmode="numeric" class="amt" autocomplete="off"></label><label>Paid by${modeSel('nv_bmode', 'Cheque')}</label></div>
   </div>
   <label>Remark<textarea id="nv_remark" rows="3" placeholder="Anything about the visit: people, budget, plots liked, what to talk about next…"></textarea></label>`, 'Save visit', () => saveNew('visit'), true);
 };
@@ -844,7 +860,7 @@ function flowDlg(ds) {
     <div class="g2"><label>Client name *<input id="fh_name" value="${esc(nm)}"${c0 ? ' disabled' : ''}></label><label>Phone<input id="fh_phone" value="${esc(ph)}" inputmode="numeric" maxlength="14"${c0 ? ' disabled' : ''}></label></div>
     <div id="fh_match"></div>
     <label>Plot * <span class="muted">(only plots that are still unsold: ${free.length})</span><select id="fh_plot"><option value="">Choose a plot</option>${free.map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
-    <div class="g2"><label>Hold amount<input id="fh_amt" type="number" value="1100"></label><label>Hold date *<input id="fh_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>Hold amount<input id="fh_amt" type="text" inputmode="numeric" class="amt" autocomplete="off" value="1100"></label><label>Hold date *<input id="fh_date" type="date" value="${today()}"></label></div>
     <div class="g2"><label>Paid by${modeSel('fh_mode', 'Cash')}</label><span></span></div><label>Agent <span class="muted">(choose one or more)</span>${agentChips(v ? v.by : '', 'fh_by')}</label>
     <label>Note<input id="fh_note" placeholder="Optional"></label>`, 'Save hold', () => {
       const name = c0 ? c0.name : $('#fh_name').value.trim(); const phone = c0 ? c0.phone : $('#fh_phone').value.replace(/\D/g, '') || null;
@@ -861,22 +877,44 @@ function flowDlg(ds) {
   } else if (ds.flow === 'book') {
     const b = bookingById[ds.bid]; const c = clientById[ds.cid]; const pl = D.plots[b.plot];
     const vlist = D.visits.filter(x => x.client === c.id).sort((a, z) => String(z.date || '').localeCompare(String(a.date || '')));
-    openDlg('Book plot ' + esc(b.plot), esc(c.name) + ' · on hold since ' + fd(b.holdDate) + (pl && pl.area ? ' · ' + pl.area + ' sq yd' : ''), `
-    <label>Final amount * <span class="muted">(the agreed price of the plot)</span><input id="fb_final" type="number" placeholder="e.g. 1100000"></label>
-    <div class="g2"><label>Booking amount<input id="fb_amt" type="number" placeholder="Amount received now"></label><label>Date *<input id="fb_date" type="date" value="${today()}"></label></div>
-    <div class="g2"><label>Paid by${modeSel('fb_mode', 'Cheque')}</label><label>Loan<select id="fb_loan"><option>Not Availed</option><option>Loan Availed</option></select></label></div>
-    <div class="g2"><label>Loan amount<input id="fb_lamt" type="number"></label><label>EMI<input id="fb_emi" type="number"></label></div>
+    const paidNow = Math.round(paidOf(clientPayments(c.id).filter(p => (p.plots || []).includes(b.plot)))); const area = pl && pl.area;
+    openDlg('Book plot ' + esc(b.plot), esc(c.name) + ' · on hold since ' + fd(b.holdDate) + (area ? ' · ' + area + ' sq yd' : ''), `
+    <div class="sec2">Price</div>
+    <div class="g2"><label>Final amount *<input id="fb_final" ${AMT_ATTR} placeholder="Agreed price, e.g. 1100000"></label>
+      <label>Price per sq yd<input id="fb_rate" disabled placeholder="${area ? 'Final amount ÷ ' + area + ' sq yd' : 'Plot size not known'}"></label></div>
+    <div class="sec2">Booking payment</div>
+    <div class="g2"><label>Booking amount<input id="fb_amt" ${AMT_ATTR} placeholder="Amount received now"></label><label>Booking date *<input id="fb_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>Booking mode${modeSel('fb_mode', 'Cheque')}</label><label>Note<input id="fb_note" placeholder="Cheque no., bank … (optional)"></label></div>
+    <div class="sec2">First down payment (DP) <span style="text-transform:none;letter-spacing:0">· optional, more DPs can be added later</span></div>
+    <div class="g2"><label>DP amount<input id="fb_dpamt" ${AMT_ATTR} placeholder="Leave empty if none yet"></label><label>DP date<input id="fb_dpdate" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>DP mode${modeSel('fb_dpmode', 'Cheque')}</label><span></span></div>
+    <div class="sec2">Loan</div>
+    <div class="g2"><label>Loan<select id="fb_loan"><option>Not Availed</option><option>Loan Availed</option></select></label><label id="fb_bankl" style="display:none">Bank<input id="fb_bank" placeholder="e.g. SBI, HDFC"></label></div>
+    <div class="g2" id="fb_loanf" style="display:none"><label>Loan amount<input id="fb_lamt" ${AMT_ATTR}></label><label>EMI<input id="fb_emi" ${AMT_ATTR} placeholder="Per month"></label></div>
+    <div class="bsum" id="fb_sum"></div>
     <div class="note" style="margin:0">Saving marks the plot Sold and the booking Booked${vlist.length ? ', and the site visit Booked' : ''}. The document status starts as "MOU not done".</div>`, 'Book plot', () => {
-      const final = num('#fb_final'); if (!final) return err('Enter the final amount.'); if (!$('#fb_date').value) return err('Enter the date.');
+      const final = num('#fb_final'); if (!final) return err('Enter the final amount.'); if (!$('#fb_date').value) return err('Enter the booking date.');
+      const amount = num('#fb_amt'), dp = num('#fb_dpamt'); if (dp && !$('#fb_dpdate').value) return err('Enter the DP date.');
+      if (paidNow + (amount || 0) + (dp || 0) > final) return err('Hold + booking + DP is more than the final amount. Check the amounts.');
+      const loan = $('#fb_loan').value, availed = loan === 'Loan Availed';
       const s = stamp();
-      const f = {type: 'book', at: new Date().toISOString(), role: ROLE(), bid: b.id, cid: c.id, vid: vlist[0] ? vlist[0].id : null, final, amount: num('#fb_amt'), date: $('#fb_date').value, mode: $('#fb_mode').value,
-        loan: $('#fb_loan').value, loanAmount: num('#fb_lamt'), emi: num('#fb_emi'), pid: 'PN' + s, psr: maxSr(D.payments) + 1};
+      const f = {type: 'book', at: new Date().toISOString(), role: ROLE(), bid: b.id, cid: c.id, vid: vlist[0] ? vlist[0].id : null, final, amount, date: $('#fb_date').value, mode: $('#fb_mode').value, note: $('#fb_note').value.trim() || null,
+        loan, loanBank: availed ? $('#fb_bank').value.trim() || null : null, loanAmount: availed ? num('#fb_lamt') : null, emi: availed ? num('#fb_emi') : null, pid: 'PN' + s, psr: maxSr(D.payments) + 1,
+        dp: dp ? {amount: dp, date: $('#fb_dpdate').value, mode: $('#fb_dpmode').value, pid: 'PD' + s, psr: maxSr(D.payments) + 2} : null};
       runFlow(f, 'Plot ' + b.plot + ' booked for ' + c.name);
     }, true);
+    const upd = () => {
+      const availed = $('#fb_loan').value === 'Loan Availed'; $('#fb_loanf').style.display = availed ? '' : 'none'; $('#fb_bankl').style.display = availed ? '' : 'none';
+      const final = num('#fb_final'), amount = num('#fb_amt') || 0, dp = num('#fb_dpamt') || 0;
+      $('#fb_rate').value = final && area ? inr(Math.round(final / area)) : '';
+      const cell = (k, v, red) => `<div><small>${k}</small><b${red ? ' style="color:var(--lapsed)"' : ''}>${v}</b></div>`;
+      $('#fb_sum').innerHTML = cell('Paid so far (hold)', inr(paidNow)) + cell('Paid now', inr(amount + dp)) + cell('Total after booking', inr(paidNow + amount + dp)) + cell('Balance', final ? inr(final - paidNow - amount - dp) : '—', final && final - paidNow - amount - dp < 0);
+    };
+    const box = $('#dlg .dlg'); box.addEventListener('input', upd); box.addEventListener('change', upd); upd(); // on this form only, so it goes away with it
   } else if (ds.flow === 'dp') {
     const b = bookingById[ds.bid]; const c = clientById[ds.cid]; const n = dpEntries(b).length;
     openDlg('Add DP · plot ' + esc(b.plot || ''), esc(c.name) + (n ? ' · DP so far ' + inr(dpTotal(b)) + ' in ' + n + ' payment' + (n > 1 ? 's' : '') : ' · first down payment'), `
-    <div class="g2"><label>DP amount *<input id="fd_amt" type="number"></label><label>DP date *<input id="fd_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>DP amount *<input id="fd_amt" type="text" inputmode="numeric" class="amt" autocomplete="off"></label><label>DP date *<input id="fd_date" type="date" value="${today()}"></label></div>
     <div class="g2"><label>DP mode${modeSel('fd_mode', 'Cheque')}</label><label>Note<input id="fd_note" placeholder="e.g. 3rd instalment, cheque no. 000123"></label></div>
     <div class="note" style="margin:0">Saved as a payment of this client, so it counts in Paid till now.</div>`, 'Save DP', () => {
       const amount = num('#fd_amt'); if (!amount) return err('Enter the DP amount.'); if (!$('#fd_date').value) return err('Enter the DP date.');
@@ -887,7 +925,7 @@ function flowDlg(ds) {
   } else if (ds.flow === 'pay') {
     const c = clientById[ds.cid]; const plots = clientPlots(c);
     openDlg('Add payment', esc(c.name), `
-    <div class="g2"><label>Amount *<input id="fp_amt" type="number"></label><label>Date *<input id="fp_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>Amount *<input id="fp_amt" type="text" inputmode="numeric" class="amt" autocomplete="off"></label><label>Date *<input id="fp_date" type="date" value="${today()}"></label></div>
     <div class="g2"><label>Paid by${modeSel('fp_mode', 'Cheque')}</label><label>For plot<select id="fp_plot">${plots.length > 1 ? '<option value="">All plots / not specific</option>' : ''}${plots.map(p => `<option ${clientSel[c.id] === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label></div>
     <label>Note<input id="fp_note" placeholder="e.g. 2nd instalment, cheque no. 000123"></label>`, 'Save payment', () => {
       const amount = num('#fp_amt'); if (!amount) return err('Enter the amount.'); if (!$('#fp_date').value) return err('Enter the date.');
@@ -992,7 +1030,7 @@ V.client = id => {
         ['Hold date', ed('bookings', b, 'holdDate', 'date')], ['Hold amount', ed('bookings', b, 'holdAmount', 'money')], ['Hold mode', ed('bookings', b, 'holdMode', 'select', 'payMode')],
         ['Refund', refund(b)], ['Refund amount', rf(b, 'refundAmount', 'money')], ['Refund mode', rf(b, 'refundMode', 'select', 'payMode')],
         ['Booking date', ed('bookings', b, 'bookingDate', 'date')], ['Booking amount', ed('bookings', b, 'bookingAmount', 'money')], ['Booking mode', ed('bookings', b, 'bookingMode', 'select', 'payMode')],
-        ...dpCells(b), ['Loan', ed('bookings', b, 'loan', 'select', 'loan')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')]])}` : ''; // one block, so its one pencil edits every row
+        ...dpCells(b), ['Loan', ed('bookings', b, 'loan', 'select', 'loan') + (/avail/i.test(b.loan || '') && !/not/i.test(b.loan || '') || b.loanBank ? `<div style="font-weight:400;font-size:12.5px;margin-top:2px"><span class="muted">Bank: </span>${ed('bookings', b, 'loanBank')}</div>` : '')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')]])}` : ''; // one block, so its one pencil edits every row
     const mou = b || d ? `<div class="psub">MOU and dastavej</div>${kv3([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}` : '';
     return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : hold ? 'b-hold' : 'b-lapsed'}">${val(outcomeLabel(b))}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
     ${hold ? `<div class="acts"><span>This plot is on hold since ${fd(b.holdDate)}.</span><button class="btn primary small" data-flow="book" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Booked</button><button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Lapsed</button></div>` : ''}
@@ -1149,7 +1187,7 @@ const addExpenseForm = () => `<div class="card"><h2>New site expense</h2><div cl
   <label>For<select id="ne_for">${OPTS.forWhat.map(x => `<option>${x}</option>`).join('')}</select></label>
   <label>Type<select id="ne_type">${['Material Exp', 'Labour Exp', 'Machinery Exp', 'Sub Contractor Pay', 'Electricity Exp', 'Diesel & Petrol Exp', 'Water Exp', 'Plumbing Exp', 'Site Sillak', 'LandOwner Advance Pay', 'Other'].map(x => `<option>${x}</option>`).join('')}</select></label>
   <label>Contractor<select id="ne_con"><option value="">None</option>${D.contractors.map(c => `<option>${esc(c.name)}</option>`).join('')}</select></label>
-  <label>Amount (₹)<input type="number" id="ne_amt"></label><label>Paid by<select id="ne_method">${OPTS.method.map(x => `<option>${x}</option>`).join('')}</select></label>
+  <label>Amount (₹)<input id="ne_amt" type="text" inputmode="numeric" class="amt" autocomplete="off"></label><label>Paid by<select id="ne_method">${OPTS.method.map(x => `<option>${x}</option>`).join('')}</select></label>
   <div class="row"><button class="btn primary" data-save="expense">Save expense</button><button class="btn" data-add="">Cancel</button></div></div><div class="err" id="ne_err"></div></div>`;
 
 // ---------- Incentives ----------
@@ -1278,7 +1316,7 @@ function exportAll() {
       {label: 'Hold mode', get: b => b.holdMode}, {label: 'Refund amount', type: 'money', get: b => b.refundAmount}, {label: 'Refund mode', get: b => b.refundMode},
       {label: 'Booking date', type: 'date', get: b => b.bookingDate}, {label: 'Booking amount', type: 'money', get: b => b.bookingAmount}, {label: 'Booking mode', get: b => b.bookingMode},
       {label: 'Final amount', type: 'money', get: b => b.finalAmount}, {label: 'DP total', type: 'money', get: dpTotal}, {label: 'DP payments', type: 'num', get: b => dpEntries(b).length || null}, {label: 'Last DP date', type: 'date', get: b => (dpEntries(b).slice(-1)[0] || {}).date || null},
-      {label: 'Loan', get: b => b.loan}, {label: 'Loan amount', type: 'money', get: b => b.loanAmount}, {label: 'EMI', type: 'money', get: b => b.emi}, {label: 'Payment status (old sheet)', get: b => b.payment}, {label: 'Refund', get: b => b.refunded}, {label: 'Remarks', get: b => b.remarks}]);
+      {label: 'Loan', get: b => b.loan}, {label: 'Bank', get: b => b.loanBank}, {label: 'Loan amount', type: 'money', get: b => b.loanAmount}, {label: 'EMI', type: 'money', get: b => b.emi}, {label: 'Payment status (old sheet)', get: b => b.payment}, {label: 'Refund', get: b => b.refunded}, {label: 'Remarks', get: b => b.remarks}]);
     raw('Payments', [...D.payments].sort((a, b) => (a.sr || 0) - (b.sr || 0)), [
       {label: 'Sr.', type: 'num', get: p => p.sr}, {label: 'Date', type: 'date', get: p => p.date}, {label: 'Entry', get: p => p.text}, {label: 'Amount', type: 'money', get: p => p.amount},
       {label: 'Mode', get: p => p.mode}, {label: 'Plots', get: p => (p.plots || []).join(', ')}, {label: 'Client', get: p => p.clients.map(id => (clientById[id] || {}).name).filter(Boolean).join(', ')},
