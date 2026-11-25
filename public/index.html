@@ -589,6 +589,10 @@ const FIELD_LABELS = {date: 'Date', name: 'Name', phone: 'Phone', by: 'Agent', s
   owner: 'Owner', plot: 'Plot', sqYard: 'Sq yard', saleValue: 'Total sale value', anjaneePaid: 'Anjanee paid', area: 'Area (sq yd)', note: 'Note', particulars: 'Particulars', for: 'For', type: 'Type', amount: 'Amount', method: 'Paid by', remarks: 'Remarks',
   text: 'Entry', mode: 'Mode', particular: 'Particular', advance: 'Advance', bookingDate: 'Booking date', final: 'Final incentive', pending: 'Pending', sellAmount: 'Sell amount', size: 'Size', slab: 'Slab'};
 const fieldLabel = f => { const m = /^fu(\d)(Date|Note)$/.exec(f); if (m) return 'Follow-up ' + m[1] + ' ' + m[2].toLowerCase(); return FIELD_LABELS[f] || f.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()); };
+const FIELD_SECTIONS = {holdDate: 'Hold', holdAmount: 'Hold', holdMode: 'Hold',
+  bookingDate: 'Booking', bookingAmount: 'Booking', bookingMode: 'Booking', payName: 'Booking', payRef: 'Booking', payBank: 'Booking',
+  dpDate: 'Down payment (DP)', dpAmount: 'Down payment (DP)', dpMode: 'Down payment (DP)',
+  refundAmount: 'Refund', refundMode: 'Refund', loan: 'Loan', loanBank: 'Loan', loanAmount: 'Loan', emi: 'Loan'};
 // pencil form: each mode box with the proof boxes of the same record
 const detGroups = fields => fields.filter(x => (x.coll === 'bookings' && x.f === 'bookingMode') || (x.coll === 'payments' && x.f === 'mode'))
   .map(mf => ({mf, dets: fields.filter(x => x.coll === mf.coll && x.id === mf.id && DETAIL_FIELDS.includes(x.f))})).filter(g => g.dets.length);
@@ -678,7 +682,12 @@ document.addEventListener('click', e => {
   const one = [...new Set(fields.map(x => x.coll + '|' + x.id))];
   const delBtn = canDelete() && one.length === 1 && DELETABLE.includes(fields[0].coll) && !(fields[0].coll === 'clients' && location.hash.startsWith('#/client/'))
     ? `<button class="btn danger" type="button" data-dlgdel="${esc(one[0])}">Delete this ${fields[0].coll === 'visits' ? 'visit' : 'record'}</button>` : '';
-  openDlg(esc(sp._title || 'Edit'), esc(recs.slice(0, 2).join(' · ')), `<div class="g2">${fields.map(x => x.html).join('')}</div>`, 'Save', () => {
+  // booking fields are grouped under headings (Hold / Booking / …) so the two are never mixed up
+  const secOf = x => x.coll === 'bookings' ? FIELD_SECTIONS[x.f] || null : null;
+  const secs = [...new Set(fields.map(secOf))];
+  const body = secs.length > 1 || secs[0] ? secs.map(sc => `${sc ? `<div class="sec2">${esc(sc)}</div>` : ''}<div class="g2">${fields.filter(x => secOf(x) === sc).map(x => x.html).join('')}</div>`).join('')
+    : `<div class="g2">${fields.map(x => x.html).join('')}</div>`;
+  openDlg(esc(sp._title || 'Edit'), esc(recs.slice(0, 2).join(' · ')), body, 'Save', () => {
     const changes = [];
     fields.forEach(x => {
       if (x.lock) return;
@@ -704,7 +713,8 @@ document.addEventListener('click', e => {
   if (delBtn) $('.dlg .df').insertAdjacentHTML('afterbegin', delBtn.replace('class="btn danger"', 'class="btn danger left"'));
   detGroups(fields).forEach(({mf, dets}) => { const sync = changed => { const ds = Object.fromEntries(detailsFor($('#' + mf.nm).value).map(([f, l]) => [f, l]));
       dets.forEach(x => { const inp = $('#' + x.nm), lab = inp.closest('label'); if (changed) inp.value = ''; // new mode: its boxes mean something else
-        lab.style.display = ds[x.f] ? '' : 'none'; if (ds[x.f]) lab.childNodes[0].textContent = ds[x.f]; }); };
+        lab.style.display = ds[x.f] ? '' : 'none'; if (ds[x.f]) lab.childNodes[0].textContent = ds[x.f]; });
+      Object.keys(ds).forEach(f => { const x = dets.find(d => d.f === f); if (x) { const lab = $('#' + x.nm).closest('label'); lab.parentNode.appendChild(lab); } }); }; // in the mode's own order
     $('#' + mf.nm).addEventListener('change', () => sync(true)); sync(false); });
 }, true);
 document.addEventListener('keydown', e => {
