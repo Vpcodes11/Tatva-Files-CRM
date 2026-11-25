@@ -35,13 +35,19 @@ with sync_playwright() as p:
     ok(a.evaluate(E, f"D.plots['{pl}'].status") == 'SOLD OUT' and a.evaluate(E, "vStatus(D.visits.find(x => x.name === 'Book Test'))[0]") == 'Converted', 'Book from the form books the plot and converts the visit')
     # agents can be changed with the pencil (multi)
     a.evaluate(E, "location.hash='#/visits'"); a.wait_for_timeout(300)
-    # 3: lapsed visits in their own tab
-    nL = a.evaluate(E, "D.visits.filter(v => v.client && clientById[v.client] && clientStatus(clientById[v.client])[0] === 'Lapsed').length")
-    shown = a.evaluate(E, "document.querySelector('.tcount, .count') ? 0 : 0")
+    # 3: lapsed — the Site visits Lapsed tab is exactly the lapsed clients
+    nL = a.evaluate(E, "D.clients.filter(c => clientStatus(c)[0] === 'Lapsed').length")
     a.click('[data-lv=visitsLapsed][data-val="1"]'); a.wait_for_timeout(300)
     rows = a.evaluate(E, "document.querySelectorAll('tbody tr').length"); go = a.evaluate(E, "(document.querySelector('tbody tr') || {dataset: {}}).dataset.go || ''")
-    ok(nL > 0 and rows == nL and go.startswith('#/client/'), 'Lapsed tab lists %d lapsed visits and opens the client' % nL)
+    ids = a.evaluate(E, "[...document.querySelectorAll('tbody tr')].map(r => r.dataset.go.split('/')[2])")
+    ok(nL > 0 and rows == nL and go.startswith('#/client/'), 'Lapsed tab lists the same %d lapsed clients as Clients, and opens the client' % nL)
+    ok(all(a.evaluate(E, f"clientStatus(clientById['{i}'])[0]") == 'Lapsed' for i in ids), 'every row in the Lapsed tab is a lapsed client')
+    tab = a.evaluate(E, "document.querySelectorAll('[data-lv=visitsLapsed]')[1].innerText"); ok(str(nL) in tab, 'tab count matches Clients (%s)' % tab.replace(chr(10), ' '))
     a.click('[data-lv=visitsLapsed][data-val=""]'); a.wait_for_timeout(300)
+    st = a.evaluate(E, "[...new Set(D.visits.filter(v => vStatus(v)[0] !== 'Lapsed').map(v => vStatus(v)[0]))].sort()")
+    ok('Lapsed' not in st and 'Follow up 2' in st and 'Hold' in st, 'main Site visits statuses: %s' % st)
+    mism = a.evaluate(E, "D.visits.filter(v => v.client && clientById[v.client]).filter(v => { const c = clientStatus(clientById[v.client])[0]; const s = vStatus(v)[0]; return !((c==='Booked'&&s==='Converted')||(c==='On hold'&&s==='Hold')||(c==='Lapsed'&&s==='Lapsed')); }).length")
+    ok(mism == 0, 'every linked visit shows its client folder status (mismatches: %d)' % mism)
     # 6 + 8: clients
     a.evaluate(E, "location.hash='#/clients'"); a.wait_for_timeout(400)
     nLc = a.evaluate(E, "D.clients.filter(c => clientStatus(c)[0] === 'Lapsed').length")

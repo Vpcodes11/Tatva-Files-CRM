@@ -229,6 +229,8 @@ async function apiOps(env, req, user) {
       const cur = working[key] || await getRec(op.coll, op.id);
       if (!cur) return fail(404, 'This record no longer exists. Refresh the page.');
       const next = {...cur, [op.field]: op.value === undefined ? null : op.value};
+      if (op.coll === 'visits' && op.field === 'status' && cur.client)
+        return fail(403, 'This visit is linked to a client folder, so its status follows the folder. Change it from the client folder.');
       const lock = lockError(user, op.coll, cur, next);
       if (lock) return fail(403, lock);
       working[key] = next;

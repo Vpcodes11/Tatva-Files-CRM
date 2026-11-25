@@ -336,9 +336,20 @@ store.edits.forEach(e => { if (!e.undone && !e.undoOf) editedSet.add(e.coll + '|
 const bookingById = IDX.bookings, clientById = IDX.clients;
 const plotOwner = D.plotOwners;
 const landByPlot = () => Object.fromEntries(D.landowners.filter(l => l.plot).map(l => [l.plot, l]));
-function vStatus(v) { const s = (v.status || '').toUpperCase();
-  if (s.includes('NOT')) return ['Not interested', 'b-lapsed']; if (s.includes('FOLLOW')) return ['Follow up', 'b-hold'];
-  if (s === 'DONE' || s.includes('CONVERT')) return ['Converted', 'b-sold']; return ['No status', 'b-none']; }
+// Status of a site visit. When the visit is linked to a client folder, the folder decides it (Converted / Hold / Lapsed),
+// so the Site visits list and the Clients list always agree. Otherwise it is the status set on the visit itself.
+const VISIT_STATUSES = ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Hold', 'Converted', 'Not interested', 'Lapsed', 'No status'];
+const fuFromRemark = v => { const m = String(v.remark || '').match(/FU([1-4])/g); return m ? Math.max(...m.map(x => +x[2])) : 1; };
+function vStatus(v) {
+  const c = v.client && clientById[v.client];
+  if (c) { const cs = clientStatus(c)[0]; return cs === 'On hold' ? ['Hold', 'b-hold'] : cs === 'Lapsed' ? ['Lapsed', 'b-lapsed'] : ['Converted', 'b-sold']; }
+  const s = (v.status || '').toUpperCase();
+  if (s.includes('NOT')) return ['Not interested', 'b-none'];
+  if (s === 'DONE' || s.includes('CONVERT')) return ['Converted', 'b-sold'];
+  if (s.includes('HOLD')) return ['Hold', 'b-hold'];
+  if (s.includes('FOLLOW')) { const n = (s.match(/[1-4]/) || [])[0] || fuFromRemark(v); return ['Follow up ' + n, 'b-dev']; }
+  return ['No status', 'b-none'];
+}
 const isConvertedVisit = v => vStatus(v)[0] === 'Converted';
 const isConvertedBooking = b => /convert/i.test(b.outcome || '');
 function clientStatus(c) {
@@ -374,7 +385,7 @@ function plotClass(p) {
 const fuStage = v => { for (let i = 4; i >= 1; i--) if (v['fu' + i + 'Date'] || v['fu' + i + 'Note']) return i; return 0; };
 const AGENTS = [...new Set([...D.visits, ...D.bookings].flatMap(x => agentsOf(x.by)))].filter(a => a !== 'Company').sort();
 const OPTS = {
-  visitStatus: ['Follow up', 'Converted', 'Not interested'],
+  visitStatus: ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Converted', 'Not interested'],
   agents: [...AGENTS, 'Company'],
   incAgents: AGENTS.filter(a => !/pratik/i.test(a)),
   outcome: ['Plot On Hold', 'Converted', 'Lapsed'],
@@ -391,6 +402,7 @@ const OPTS = {
 // ---------- inline editing ----------
 const ROLE = () => ME.role;
 function lockReason(coll, o, f) {
+  if (coll === 'visits' && f === 'status' && o.client && clientById[o.client]) return 'This visit is linked to a client folder, so its status follows the folder (Hold, Converted or Lapsed). Change it from the client folder.';
   if (ROLE() !== 'Agent') return null;
   if (coll === 'visits' && f === 'status' && isConvertedVisit(o)) return 'This visit is Converted. Only Admin or Super admin can change it.';
   if (coll === 'bookings' && f === 'outcome' && isConvertedBooking(o)) return 'This booking is Converted. Only Admin or Super admin can change it.';
@@ -402,7 +414,7 @@ function ed(coll, o, f, kind = 'text', opt = '', shown) {
   const disp = shown != null ? shown : kind === 'date' ? fd(v) : kind === 'money' ? inr(v) : val(v);
   const lock = lockReason(coll, o, f);
   const edited = editedSet.has(coll + '|' + o.id + '|' + f);
-  return `<span class="ed${lock ? ' locked' : ''}${edited ? ' edited' : ''}" data-e="${esc(coll)}|${esc(o.id)}|${esc(f)}|${kind}|${opt}"${lock ? ` data-lock="${esc(lock)}"` : ''}>${disp}${lock ? '<span class="lock">locked</span>' : ''}</span>`;
+  return `<span class="ed${lock ? ' locked' : ''}${edited ? ' edited' : ''}" data-e="${esc(coll)}|${esc(o.id)}|${esc(f)}|${kind}|${opt}"${lock ? ` data-lock="${esc(lock)}"` : ''}>${disp}${lock ? `<span class="lock">${/linked to a client/.test(lock) ? 'from folder' : 'locked'}</span>` : ''}</span>`;
 }
 const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const PEN_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
@@ -665,17 +677,33 @@ V.visits = () => {
     {k: 'name', label: 'Name', nofilter: true, get: v => v.name, cell: v => `<b>${ed('visits', v, 'name')}</b>`},
     {k: 'phone', label: 'Phone', nofilter: true, get: v => v.phone, cell: v => ed('visits', v, 'phone')},
     {k: 'by', label: 'Agent', get: v => v.by, multi: v => agentsOf(v.by), cell: v => ed('visits', v, 'by', 'select', 'agents')},
-    {k: 'status', label: 'Status', order: ['Follow up', 'Converted', 'Not interested', 'No status'], get: v => vStatus(v)[0], cell: v => ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${vStatus(v)[1]}">${vStatus(v)[0]}</span>`)},
+    {k: 'status', label: 'Status', order: VISIT_STATUSES, get: v => vStatus(v)[0], cell: v => ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${vStatus(v)[1]}">${vStatus(v)[0]}</span>`)},
     {k: 'remark', label: 'Remark', nofilter: true, get: v => v.remark, cell: v => `<span class="muted clip">${val(v.remark)}</span>`}
   ];
-  const isLapsedVisit = v => { const c = v.client && clientById[v.client]; return !!c && clientStatus(c)[0] === 'Lapsed'; };
-  const nLapsed = D.visits.filter(isLapsedVisit).length;
-  const rows = EXPORT_ALL ? D.visits : D.visits.filter(v => isLapsedVisit(v) === !!listView.visitsLapsed);
-  const t = tbl('visits' + (listView.visitsLapsed ? '-lapsed' : ''), cols, rows, {rowGo: v => listView.visitsLapsed ? '#/client/' + v.client : '#/visit/' + v.id, limit: 200, noun: 'visits', order: (a, b) => b.sr - a.sr});
-  return crumbs([['Files'], ['Site visits']]) + `<div class="row" style="justify-content:space-between"><h1>Site visits</h1><button class="btn primary" data-addvisit>+ Add visit</button></div>
-  <p class="sub">Every visitor is registered here first. Use the ${FUNNEL} button in any column header to sort or filter, as in Google Sheets. A Converted visit is locked for agents.</p>
-  <div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="chip${!listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="">Active visits <span class="muted">${D.visits.length - nLapsed}</span></span><span class="chip${listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="1">Lapsed <span class="muted">${nLapsed}</span></span>${listView.visitsLapsed ? '<span class="muted" style="font-size:12.5px;margin-left:4px">Visits whose hold lapsed. Click a row to open the client.</span>' : ''}</div>
-  ${t.html}`;
+  const isLapsedVisit = v => vStatus(v)[0] === 'Lapsed';
+  const lapsedClients = D.clients.filter(c => clientStatus(c)[0] === 'Lapsed');
+  const tabs = `<div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="chip${!listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="">Site visits <span class="muted">${D.visits.filter(v => !isLapsedVisit(v)).length}</span></span><span class="chip${listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="1">Lapsed <span class="muted">${lapsedClients.length}</span></span>${listView.visitsLapsed ? '<span class="muted" style="font-size:12.5px;margin-left:4px">Clients whose hold lapsed — the same list as Lapsed in Clients. Click one to open the client.</span>' : ''}</div>`;
+  const head = crumbs([['Files'], ['Site visits']]) + `<div class="row" style="justify-content:space-between"><h1>Site visits</h1><button class="btn primary" data-addvisit>+ Add visit</button></div>
+  <p class="sub">Every visitor is registered here first. Use the ${FUNNEL} button in any column header to sort or filter, as in Google Sheets. A visit linked to a client folder takes its status from the folder.</p>${tabs}`;
+  if (listView.visitsLapsed && !EXPORT_ALL) {
+    const visitsOf = c => D.visits.filter(v => v.client === c.id).sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    const lb = c => c.bookings.map(id => bookingById[id]).filter(Boolean);
+    const lt = tbl('visits-lapsed', [
+      {k: 'sr', label: 'Sr.', type: 'num', nofilter: true, get: c => c.sr},
+      {k: 'vdate', label: 'Visit date', type: 'date', get: c => (visitsOf(c)[0] || {}).date || null},
+      {k: 'name', label: 'Client', nofilter: true, get: c => c.name, cell: c => `<b>${esc(c.name)}</b>`},
+      {k: 'phone', label: 'Phone', nofilter: true, get: c => c.phone},
+      {k: 'by', label: 'Agent', get: c => (visitsOf(c)[0] || {}).by || lb(c).map(b => b.by).filter(Boolean)[0] || null, multi: c => agentsOf((visitsOf(c)[0] || {}).by || lb(c).map(b => b.by).filter(Boolean)[0] || '')},
+      {k: 'plots', label: 'Plots held', nofilter: true, get: c => [...new Set(lb(c).map(b => b.plot).filter(Boolean))].join(', ')},
+      {k: 'hold', label: 'Last hold date', type: 'date', get: clientDate},
+      {k: 'refund', label: 'Refund', get: c => lb(c).map(b => b.refunded).filter(Boolean)[0] || null},
+      {k: 'remark', label: 'Remark', nofilter: true, get: c => (visitsOf(c)[0] || {}).remark || null, cell: c => `<span class="muted clip">${val((visitsOf(c)[0] || {}).remark)}</span>`}
+    ], lapsedClients, {rowGo: c => '#/client/' + c.id, noun: 'lapsed clients', title: 'Lapsed clients', order: (a, b) => String(clientDate(b) || '').localeCompare(String(clientDate(a) || ''))});
+    return head + lt.html;
+  }
+  const rows = EXPORT_ALL ? D.visits : D.visits.filter(v => !isLapsedVisit(v));
+  const t = tbl('visits', cols, rows, {rowGo: v => '#/visit/' + v.id, limit: 200, noun: 'visits', title: 'Site visits', order: (a, b) => b.sr - a.sr});
+  return head + t.html;
 };
 const openAddVisit = () => {
   const today = new Date().toISOString().slice(0, 10);
@@ -1328,7 +1356,7 @@ function saveNew(kind) {
     const agents = chipVals('agents'); if (!agents.length) return err('Choose at least one agent.');
     const pick = ($('#dlg .chips[data-group=deal] .chip.on') || {dataset: {}}).dataset.chip || 'Follow up';
     const deal = pick === 'Hold' ? 'hold' : pick === 'Book' ? 'book' : 'none';
-    const status = pick === 'Hold' ? 'Follow up' : pick === 'Book' ? 'Converted' : pick;
+    const status = pick === 'Hold' ? 'Follow up 1' : pick === 'Book' ? 'Converted' : pick === 'Follow up' ? 'Follow up 1' : pick;
     const v = {id: 'N' + Date.now(), added: true, row: 0, date: $('#nv_date').value, name, phone: phone || null, by: agents.join(', '), status, remark: $('#nv_remark').value.trim() || null, client: null, source: 'Added in CRM', sr: maxSr(D.visits) + 1};
     const plot = $('#nv_plot').value; const nn = idn => $(idn).value === '' ? null : Number($(idn).value);
     if (deal !== 'none' && !plot) return err('Choose the plot.');
