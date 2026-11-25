@@ -30,10 +30,20 @@ with sync_playwright() as p:
     nav = lambda: int(q("document.querySelector('#nav [data-go=\"#/visits\"] .ct').innerText"))
     ok(nav() == q("D.visits.filter(v => vStatus(v)[0] !== 'Lapsed').length"), 'menu count = Follow up tab count (%d)' % nav())
 
+    # each tab has its own Sr. series 1, 2, 3 … (newest at the top)
+    def series_ok(lapsed):
+        tab(lapsed); t = 'visits-lapsed' if lapsed else 'visits'
+        srs = q(f"(() => {{ const m = visitSrs(); return TABLES['{t}'].rows.map(v => m.get(v.id)).sort((a, b) => a - b); }})()")
+        top = q("+document.querySelector('tbody tr td').innerText")
+        return len(srs) > 0 and srs == list(range(1, len(srs) + 1)) and top == len(srs), len(srs)
+    for lapsed in (False, True):
+        good, n = series_ok(lapsed); ok(good, '%s tab has its own Sr. 1–%d, newest on top' % ('Lapsed' if lapsed else 'Follow up', n))
     # a follow-up visit set to Lapsed moves to the Lapsed tab, and back again
-    fu = q("D.visits.find(v => !v.client && /FOLLOW/i.test(v.status || '')).id"); n0 = nav()
+    fu = q("D.visits.find(v => !v.client && /FOLLOW/i.test(v.status || '')).id"); n0 = nav(); nl0 = q("D.visits.filter(isLapsedVisit).length")
     set_status(fu, 'Lapsed'); reload(); tab(True)
     ok(q(f"vStatus(IDX.visits['{fu}'])[0]") == 'Lapsed' and in_tab(fu, 'visits-lapsed') and nav() == n0 - 1, 'Follow up visit set to Lapsed → in Lapsed tab, menu count down by 1')
+    ok(series_ok(False)[0] and series_ok(True) == (True, nl0 + 1), 'after the move both tabs are still numbered 1, 2, 3 … without gaps')
+    go(f'#/visit/{fu}'); ok(q("document.querySelector('#view .sub').innerText").startswith('Lapsed Sr. '), 'visit page shows its Lapsed Sr.: %s' % q("document.querySelector('#view .sub').innerText"))
     tab(False); ok(not in_tab(fu, 'visits'), '… and no longer in Follow up')
     set_status(fu, 'Follow up 2'); reload(); tab(False)
     ok(q(f"vStatus(IDX.visits['{fu}'])[0]") == 'Follow up 2' and in_tab(fu, 'visits') and nav() == n0, 'Lapsed visit set to Follow up 2 → back in Follow up')

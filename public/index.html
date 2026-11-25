@@ -346,6 +346,15 @@ const landByPlot = () => Object.fromEntries(D.landowners.filter(l => l.plot).map
 // "Not interested" (the old sheet value NOT INTERESTED) is shown as Lapsed.
 const VISIT_STATUSES = ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Hold', 'Converted', 'Lapsed', 'No status'];
 const clientLapsed = c => !!c && clientStatus(c)[0] === 'Lapsed';
+// Site visits: the Follow up tab and the Lapsed tab each have their own Sr. series (1, 2, 3 … oldest first),
+// worked out from the current statuses, so a visit gets a new number when it moves to the other tab.
+const isLapsedVisit = v => vStatus(v)[0] === 'Lapsed';
+function visitSrs() {
+  const m = new Map(), n = [0, 0];
+  [...D.visits].sort((a, b) => (a.sr || 0) - (b.sr || 0)).forEach(v => { const k = isLapsedVisit(v) ? 1 : 0; m.set(v.id, ++n[k]); });
+  return m;
+}
+const visitSrLabel = (v, m = visitSrs()) => (isLapsedVisit(v) ? 'Lapsed Sr. ' : 'Follow up Sr. ') + (m.get(v.id) || '—');
 const fuFromRemark = v => { const m = String(v.remark || '').match(/FU([1-4])/g); return m ? Math.max(...m.map(x => +x[2])) : 1; };
 function vStatus(v) {
   const c = v.client && clientById[v.client];
@@ -690,9 +699,9 @@ const phoneCount = () => { const m = {}; D.visits.forEach(v => { if (v.phone) m[
 let showAdd = null;
 const FU_LABEL = ['No follow-up', 'FU1', 'FU2', 'FU3 (Sahil Bhai)', 'FU4 (Pratik Sir)'];
 V.visits = () => {
-  const pc = phoneCount();
+  const pc = phoneCount(); const vsr = visitSrs();
   const cols = [
-    {k: 'sr', label: 'Sr.', type: 'num', nofilter: true, get: v => v.sr},
+    {k: 'sr', label: 'Sr.', type: 'num', nofilter: true, get: v => vsr.get(v.id)},
     {k: 'date', label: 'Visit date', type: 'date', get: v => v.date, cell: v => ed('visits', v, 'date', 'date')},
     {k: 'name', label: 'Name', nofilter: true, get: v => v.name, cell: v => `<b>${ed('visits', v, 'name')}</b>`},
     {k: 'phone', label: 'Phone', nofilter: true, get: v => v.phone, cell: v => ed('visits', v, 'phone')},
@@ -700,7 +709,6 @@ V.visits = () => {
     {k: 'status', label: 'Status', order: VISIT_STATUSES, get: v => vStatus(v)[0], cell: v => ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${vStatus(v)[1]}">${vStatus(v)[0]}</span>`)},
     {k: 'remark', label: 'Remark', nofilter: true, get: v => v.remark, cell: v => `<span class="muted clip">${val(v.remark)}</span>`}
   ];
-  const isLapsedVisit = v => vStatus(v)[0] === 'Lapsed';
   const lapsedVisits = D.visits.filter(isLapsedVisit);
   const noVisit = D.clients.filter(c => clientLapsed(c) && !D.visits.some(v => v.client === c.id)).length;
   const tabs = `<div class="row" style="gap:6px;margin:-4px 0 14px;align-items:center"><span class="chip${!listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="">Follow up <span class="muted">${D.visits.length - lapsedVisits.length}</span></span><span class="chip${listView.visitsLapsed ? ' on' : ''}" data-lv="visitsLapsed" data-val="1">Lapsed <span class="muted">${lapsedVisits.length}</span></span>${listView.visitsLapsed ? `<span class="muted" style="font-size:12.5px;margin-left:4px">Visits marked Lapsed, and visits of clients whose hold lapsed. Change the status to a Follow up to move a visit back.${noVisit ? ` ${noVisit} lapsed client${noVisit > 1 ? 's have' : ' has'} no site visit on record: see <a data-go="#/clients" style="cursor:pointer;color:var(--accent)">Clients</a> → Lapsed.` : ''}</span>` : ''}</div>`;
@@ -818,13 +826,13 @@ function visitDupHint() {
 V.visit = id => {
   const v = IDX.visits[id]; if (!v) return '<p>Visit not found.</p>';
   const s = vStatus(v); const c = v.client && clientById[v.client];
-  const others = v.phone ? D.visits.filter(x => x.phone === v.phone && x.id !== v.id) : [];
+  const others = v.phone ? D.visits.filter(x => x.phone === v.phone && x.id !== v.id) : []; const vsr = visitSrs();
   return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
-  <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">Sr. ${v.sr}</p>
+  <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">${visitSrLabel(v, vsr)}</p>
   <div class="split"><div>
   <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark')]])}</div>
   ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
-  ${others.length ? `<div class="card"><h2>Other visits by this number</h2>${others.map(o => `<div style="padding:4px 0"><a data-go="#/visit/${o.id}" style="cursor:pointer;color:var(--accent)">Sr. ${o.sr} · ${fd(o.date)}</a> <span class="muted">· ${esc(vStatus(o)[0])} · ${esc(o.by || '')}</span></div>`).join('')}</div>` : ''}
+  ${others.length ? `<div class="card"><h2>Other visits by this number</h2>${others.map(o => `<div style="padding:4px 0"><a data-go="#/visit/${o.id}" style="cursor:pointer;color:var(--accent)">${visitSrLabel(o, vsr)} · ${fd(o.date)}</a> <span class="muted">· ${esc(vStatus(o)[0])} · ${esc(o.by || '')}</span></div>`).join('')}</div>` : ''}
   </div><div>${dropzone('visit/' + v.id, 'Visit photos & slips')}</div></div>`;
 };
 
@@ -884,7 +892,7 @@ V.client = id => {
       {k: 'status', label: 'Status', get: p => p.status, cell: p => ed('payments', p, 'status', 'select', 'payStatus', payBadge(p))},
       {k: 'note', label: 'Note', get: p => p.note, cell: p => ed('payments', p, 'note')},
       {k: 'amount', label: 'Amount', type: 'money', get: p => p.amount, cell: p => amtCell(p, ed('payments', p, 'amount', 'money'))}], shownPays, {totals: ['amount'], totalIf: received, noun: 'payments'}).html : `<p class="muted">No payments linked to this ${sel !== 'all' ? 'plot' : 'client'}.</p>`;
-  const vs = D.visits.filter(x => x.client === id);
+  const vs = D.visits.filter(x => x.client === id); const vsr = visitSrs();
   return crumbs([['Files'], ['Clients', '#/clients'], [c.name]]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${ed('clients', c, 'name')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
   <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="clients|${esc(id)}|#/clients">Delete folder</button>` : ''}<button class="btn" data-flow="hold" data-cid="${esc(id)}">+ Hold another plot</button><button class="btn primary" data-flow="pay" data-cid="${esc(id)}">+ Add payment</button></div></div>
   <p class="sub">Sr. ${c.sr} · ${ed('clients', c, 'phone')}${plots.length ? ' · Plot ' + plots.map(esc).join(', ') : ''}${b0.by ? ' · Agent: ' + esc(b0.by) : ''}</p>
@@ -900,7 +908,7 @@ V.client = id => {
   ${ret.length ? `<div class="note">${ret.length} returned cheque${ret.length > 1 ? 's' : ''} (${inr(ret.reduce((a, p) => a + (p.amount || 0), 0))}) not counted in Paid till now.</div>` : ''}
   <div class="split"><div>${shownPlots.map(plotCard).join('')}<h2 style="font-size:15px;margin:6px 0 8px">Payments${sel !== 'all' ? ' for plot ' + esc(sel) : ''}</h2>${payT}</div>
   <div>${dropzone(id, 'Documents')}
-  ${vs.length ? `<div class="card"><h2>Site visits</h2>${vs.map(x => `<div style="padding:4px 0"><a data-go="#/visit/${x.id}" style="cursor:pointer;color:var(--accent)">Sr. ${x.sr} · ${fd(x.date)}</a> <span class="muted">· ${esc(x.by || '')}</span></div>`).join('')}</div>` : ''}
+  ${vs.length ? `<div class="card"><h2>Site visits</h2>${vs.map(x => `<div style="padding:4px 0"><a data-go="#/visit/${x.id}" style="cursor:pointer;color:var(--accent)">${visitSrLabel(x, vsr)} · ${fd(x.date)}</a> <span class="muted">· ${esc(x.by || '')}</span></div>`).join('')}</div>` : ''}
   <div class="card"><h2>How this folder was put together</h2>${c.links.map(l => `<div style="padding:3px 0;font-size:13px">${val(l.name)} <span class="muted">· ${esc(l.source)}${l.plot ? ' · plot ' + esc(l.plot) : ''} · ${esc(l.how)}</span></div>`).join('')}</div></div></div>`;
 };
 
@@ -1447,7 +1455,7 @@ q.addEventListener('input', () => {
   const digits = s.replace(/\D/g, ''); const hits = [];
   if (D.plots[s]) hits.push([`Plot ${s}`, plotClass(D.plots[s])[1], '#/plot/' + s]);
   D.clients.forEach(c => { if (c.name.toLowerCase().includes(s) || c.otherNames.some(n => n.toLowerCase().includes(s)) || (digits.length >= 4 && (c.phone || '').includes(digits)) || c.plots.includes(s)) hits.push([c.name, (c.plots.length ? 'Plot ' + c.plots.filter(p => D.plots[p]).join(', ') : '') + (c.phone ? ' · ' + c.phone : ''), '#/client/' + c.id]); });
-  D.visits.forEach(v => { if (!v.client && ((v.name || '').toLowerCase().includes(s) || (digits.length >= 4 && (v.phone || '').includes(digits)))) hits.push([v.name || 'Visitor', 'Site visit · Sr. ' + v.sr + ' · ' + (v.phone || ''), '#/visit/' + v.id]); });
+  const vsr = visitSrs(); D.visits.forEach(v => { if (!v.client && ((v.name || '').toLowerCase().includes(s) || (digits.length >= 4 && (v.phone || '').includes(digits)))) hits.push([v.name || 'Visitor', 'Site visit · ' + visitSrLabel(v, vsr) + ' · ' + (v.phone || ''), '#/visit/' + v.id]); });
   res.innerHTML = hits.slice(0, 12).map(h => `<a data-go="${h[2]}"><b>${esc(h[0])}</b><small>${esc(h[1])}</small></a>`).join('') || '<div class="muted" style="padding:10px 12px">No matches</div>';
   res.hidden = false;
 });
