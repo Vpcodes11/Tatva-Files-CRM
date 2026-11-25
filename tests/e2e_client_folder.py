@@ -61,5 +61,13 @@ with sync_playwright() as p:
     ok(len(q("[...document.querySelectorAll('.dlg label')].filter(l => /Refund (amount|mode)/.test(l.textContent) && !l.querySelector('.lk'))")) == 2, 'refund amount and mode can be changed with the pencil'); a.click('[data-dlgclose]')
     a.click('[data-refund]'); a.wait_for_timeout(1200); reload(h2)
     ok(q(f"D.bookings.find(x => x.cid === '{cid2}').refunded") == 'Not Refunded' and q(f"!!lockReason('bookings', D.bookings.find(x => x.cid === '{cid2}'), 'refundMode')"), 'switch off → Not refunded, refund amount / mode locked again')
+    # "How this folder was put together": no longer a card on the side, a closed line at the bottom
+    go(h)
+    ok(not q("[...document.querySelectorAll('.card h2')].some(x => x.textContent.includes('How this folder'))"), '"How this folder was put together" is no longer a card')
+    ok(q("(() => { const d = document.querySelector('details.srcinfo'); return !!d && !d.open && d.closest('.split > div:first-child') !== null && !d.nextElementSibling; })()"), 'it is a closed line at the bottom of the folder, under Payments')
+    a.click('details.srcinfo summary'); a.wait_for_timeout(150)
+    ok(a.is_visible('details.srcinfo > div') and 'Added in CRM' in q("document.querySelector('details.srcinfo').innerText"), 'click opens it and shows where the folder came from')
+    nov = q("(D.clients.find(c => !D.visits.some(v => v.client === c.id)) || {}).id")
+    go(f'#/client/{nov}'); ok(not q("!!document.querySelector('#view .split')"), 'a folder with nothing for the side column uses the full width')
     for hh in ['#/clients', '#/history', '#/check']: go(hh)
     print('ERRORS', errs)
