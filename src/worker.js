@@ -28,7 +28,32 @@ async function ensureSchema(env) {
   await migrateVisitRemarks(env);
   await migrateBookingAmounts(env);
   await migrateConvertedToBooked(env);
+  await migratePayModes(env);
   schemaReady = true;
+}
+
+// One-time change (Nov 2026): payment modes "Online" and "UPI" are merged into "UPI / Online", and the booking's
+// cheque details (chequeName / chequeNumber / chequeBank) become the general proof fields payName / payRef / payBank.
+async function migratePayModes(env) {
+  const done = await env.DB.prepare("SELECT value FROM meta WHERE key = 'migr_pay_modes'").first('value');
+  if (done) return;
+  const merge = v => typeof v === 'string' && /^\s*(online|upi)\s*$/i.test(v) ? 'UPI / Online' : v;
+  const stmts = [];
+  for (const [coll, fields] of [['payments', ['mode']], ['bookings', ['holdMode', 'bookingMode', 'dpMode', 'refundMode']]]) {
+    const rows = (await env.DB.prepare('SELECT id, data FROM records WHERE coll = ?').bind(coll).all()).results;
+    for (const r of rows) {
+      const d = JSON.parse(r.data); let changed = false;
+      for (const f of fields) { const v = merge(d[f]); if (v !== d[f]) { d[f] = v; changed = true; } }
+      if (coll === 'bookings') for (const [from, to] of [['chequeName', 'payName'], ['chequeNumber', 'payRef'], ['chequeBank', 'payBank']])
+        if (from in d) { if (d[from] && !d[to]) d[to] = d[from]; delete d[from]; changed = true; }
+      if (changed) stmts.push(env.DB.prepare("UPDATE records SET data = ?, updated_by = 'update' WHERE coll = ? AND id = ?").bind(JSON.stringify(d), coll, r.id));
+    }
+  }
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('migr_pay_modes', ?)").bind(String(stmts.length)),
+    env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'")
+  ]);
 }
 
 // One-time change (Nov 2026): the word "Converted" is now "Booked" everywhere. Saved booking statuses

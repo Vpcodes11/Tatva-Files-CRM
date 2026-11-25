@@ -34,9 +34,9 @@ with sync_playwright() as p:
     ok('Final amount and loan' not in txt and 'Payment status' not in txt, 'the "Final amount and loan" group and Payment status are gone')
 
     # book it: booking amount goes into Booking date / amount / mode, not DP
-    a.click('.acts [data-flow=book]'); a.fill('#fb_final', '1100000'); a.fill('#fb_amt', '100000'); a.select_option('#fb_mode', 'UPI'); a.click('[data-dlgok]'); a.wait_for_timeout(1500); reload(h)
+    a.click('.acts [data-flow=book]'); a.fill('#fb_final', '1100000'); a.fill('#fb_amt', '100000'); a.select_option('#fb_mode', 'UPI / Online'); a.click('[data-dlgok]'); a.wait_for_timeout(1500); reload(h)
     bk = q(f"(() => {{ const b = D.bookings.find(x => x.cid === '{cid}'); return [b.bookingAmount, b.bookingMode, !!b.bookingDate, b.dpAmount]; }})()")
-    ok(bk == [100000, 'UPI', True, None], 'Booked: booking amount saved as Booking amount / mode / date, DP left empty: %s' % bk)
+    ok(bk == [100000, 'UPI / Online', True, None], 'Booked: booking amount saved as Booking amount / mode / date, DP left empty: %s' % bk)
     area = q(f"D.plots['{pl}'].area")
     ok(stat('Final amount') == '₹11,00,000' and stat('Price per sq yd') == q(f"inr(Math.round(1100000 / {area}))"), 'Price per sq yd = final amount ÷ plot size (%s for %s sq yd)' % (stat('Price per sq yd'), area))
     ok(stat('Paid till now') == '₹1,01,100' and stat('Remaining balance') == '₹9,98,900', 'Paid till now (hold + booking) and Remaining balance: %s / %s' % (stat('Paid till now'), stat('Remaining balance')))
@@ -51,7 +51,7 @@ with sync_playwright() as p:
     for lab, val in [('Cheque name', 'Folder Test'), ('Cheque number', '004512'), ('Bank name', 'HDFC')]:
         a.fill(f"xpath=//div[@class='dlg' or contains(@class,'dlg ')]//label[starts-with(normalize-space(.), '{lab}')]//input", val)
     a.click('[data-dlgok]'); a.wait_for_timeout(1000); reload(h)
-    ok(q(f"(() => {{ const b = D.bookings.find(x => x.cid === '{cid}'); return [b.bookingMode, b.chequeName, b.chequeNumber, b.chequeBank]; }})()") == ['Cheque', 'Folder Test', '004512', 'HDFC'], 'cheque name, number and bank are saved')
+    ok(q(f"(() => {{ const b = D.bookings.find(x => x.cid === '{cid}'); return [b.bookingMode, b.payName, b.payRef, b.payBank]; }})()") == ['Cheque', 'Folder Test', '004512', 'HDFC'], 'cheque name, number and bank are saved')
     ok(all(x in q("document.querySelector('.pcols').innerText") for x in ['Cheque name', '004512', 'HDFC']), 'cheque booking: the cheque row shows in the folder')
     # Final amount is edited with the pencil on its top block; price per sq yd and balance follow
     a.click('.stats .stat small .pen >> nth=0'); a.wait_for_timeout(200)
