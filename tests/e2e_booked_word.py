@@ -29,4 +29,7 @@ with sync_playwright() as p:
     chips = q("[...document.querySelectorAll('.dlg .chips[data-group=deal] .chip')].map(c => c.dataset.chip)"); a.click('[data-dlgclose]')
     ok('Booked' in chips and 'Converted' not in chips, 'add-visit status row says Booked: %s' % chips)
     ok(q("clientStatus(clientById['%s'])[0]" % cid) == 'Booked' and q(f"vStatus(IDX.visits['{vid}'])[0]") == 'Booked', 'client and visit show Booked')
+    go('#/plots'); col = q("[...new Set(TABLES.plots.rows.map(p => TABLES.plots.cols.find(c => c.k === 'booking').get(p)))]")
+    ok('Available' in col and 'Lapsed only' not in col, 'Plots → Booking list: plots whose holds all lapsed say "Available" (%s)' % col)
+    ok('Lapsed only' not in q("document.querySelector('#view').innerText"), '"Lapsed only" is gone from the Plots page')
     print('ERRORS', errs)

@@ -1101,7 +1101,7 @@ V.plots = () => {
     {k: 'status', label: 'Status', get: p => plotClass(p)[1], cell: p => ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${plotClass(p)[2]}">${plotClass(p)[1]}</span>`)},
     {k: 'area', label: 'Area (sq yd)', type: 'num', get: p => p.area, cell: p => ed('plots', p, 'area', 'number')},
     {k: 'client', label: 'Client', get: p => plotOwner[p.no] ? clientById[plotOwner[p.no]].name : null},
-    {k: 'booking', label: 'Booking list', get: p => conv.has(p.no) ? 'Booked' : D.bookings.some(b => b.plot === p.no && /hold/i.test(b.outcome || '')) ? 'On hold' : D.bookings.some(b => b.plot === p.no) ? 'Lapsed only' : null},
+    {k: 'booking', label: 'Booking list', get: p => conv.has(p.no) ? 'Booked' : D.bookings.some(b => b.plot === p.no && /hold/i.test(b.outcome || '')) ? 'On hold' : D.bookings.some(b => b.plot === p.no) ? 'Available' : null}, // every hold on it lapsed, so it can be sold again
     {k: 'note', label: 'Note', get: p => p.note, cell: p => ed('plots', p, 'note')}
   ];
   const every = Object.values(D.plots); const isPre = p => p.trpl === 'Before TRPL'; const nPre = every.filter(isPre).length;
