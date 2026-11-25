@@ -276,11 +276,13 @@ D.visits.sort((a, b) => (b.added ? 1 : 0) - (a.added ? 1 : 0) || (a.added ? (b.s
 D.contractors.forEach(c => { c.expenses = D.expenses.filter(e => (!e.added && (c.expenseRows || []).includes(e.row)) || e.contractor === c.name); });
 const IDX = {};
 const indexColl = (name, arr) => { const m = IDX[name] || (IDX[name] = {}); Object.keys(m).forEach(k => delete m[k]); arr.forEach(o => m[o.id] = o); };
+var derivedReady = false;
 function reindex() {
   indexColl('visits', D.visits); indexColl('bookings', D.bookings); indexColl('payments', D.payments); indexColl('clients', D.clients);
   indexColl('plots', Object.values(D.plots)); indexColl('expenses', D.expenses); indexColl('landowners', D.landowners);
   indexColl('advances', D.advances); indexColl('incentives', D.incentives); indexColl('registry', Object.values(D.registry));
   indexColl('dastavej', Object.values(D.dastavej)); indexColl('ledger', D.contractors.flatMap(c => c.ledger));
+  if (derivedReady) rebuildDerived();
 }
 reindex();
 const maxSr = arr => Math.max(0, ...arr.map(o => o.sr || 0));
@@ -334,7 +336,7 @@ store.edits.forEach(e => { if (!e.undone && !e.undoOf) editedSet.add(e.coll + '|
 
 // ---------- lookups ----------
 const bookingById = IDX.bookings, clientById = IDX.clients;
-const plotOwner = D.plotOwners;
+const plotOwner = {}, plotBk = {}; // filled by rebuildDerived(): who owns each plot and which booking decides its status
 const landByPlot = () => Object.fromEntries(D.landowners.filter(l => l.plot).map(l => [l.plot, l]));
 // Status of a site visit. When the visit is linked to a client folder, the folder decides it (Converted / Hold / Lapsed),
 // so the Site visits list and the Clients list always agree. Otherwise it is the status set on the visit itself.
@@ -359,6 +361,14 @@ function clientStatus(c) {
   if (outs.length) return ['Lapsed', 'b-lapsed'];
   return ['Sold · registers only', 'b-none'];
 }
+// A plot's status and owner come from its bookings when it has one, so Plots, Clients and Sold plots always agree.
+function rebuildDerived() {
+  Object.keys(plotBk).forEach(k => delete plotBk[k]);
+  D.bookings.forEach(b => { if (!b.plot) return; const e = plotBk[b.plot] || (plotBk[b.plot] = {}); if (isConvertedBooking(b)) e.conv = b; else if (/hold/i.test(b.outcome || '')) e.hold = b; });
+  Object.keys(plotOwner).forEach(k => delete plotOwner[k]); Object.assign(plotOwner, D.plotOwners);
+  D.clients.forEach(c => c.bookings.forEach(id => { const b = bookingById[id]; if (b && b.plot && isConvertedBooking(b)) plotOwner[b.plot] = c.id; }));
+}
+derivedReady = true; rebuildDerived();
 const clientPayments = id => D.payments.filter(p => p.clients.includes(id));
 const received = p => p.status !== 'Cheque returned';
 const paidOf = list => list.filter(received).reduce((a, p) => a + (p.amount || 0), 0);
@@ -374,10 +384,13 @@ const clientDate = c => { const ds = c.bookings.map(id => bookingById[id]).flatM
 const amtCell = (p, html) => received(p) ? html : `<span style="text-decoration:line-through;color:var(--ink3)">${html}</span>`;
 const payBadge = p => received(p) ? '<span class="badge b-sold">Received</span>' : '<span class="badge b-lapsed">Cheque returned</span>';
 function plotClass(p) {
+  const bk = plotBk[p.no];
+  if (bk && bk.conv) return ['s-sold', 'Sold', 'b-sold'];
+  if (bk && bk.hold) return ['s-hold', 'Hold', 'b-hold'];
   const s = (p.status || '').toUpperCase();
   if (s.includes('UNSOLD')) return ['s-unsold', 'Unsold', 'b-none'];
   if (s.includes('SOLD')) return ['s-sold', 'Sold', 'b-sold'];
-  if (s.includes('HOLD')) return ['s-hold', 'Hold', 'b-hold'];
+  if (s.includes('HOLD')) return ['s-unsold', 'Unsold', 'b-none']; // marked Hold but nobody's hold is active
   if (s.includes('DEVELOP')) return ['s-dev', 'Development area', 'b-dev'];
   if (p.trpl === 'Before TRPL') return ['s-pre', 'Sold before TRPL', 'b-dev'];
   return ['s-none', 'Not marked', 'b-none'];
@@ -402,6 +415,7 @@ const OPTS = {
 // ---------- inline editing ----------
 const ROLE = () => ME.role;
 function lockReason(coll, o, f) {
+  if (coll === 'plots' && f === 'status' && plotBk[o.no] && (plotBk[o.no].conv || plotBk[o.no].hold)) return 'This plot has a ' + (plotBk[o.no].conv ? 'Converted booking' : 'hold') + ', so its status follows the booking. Change the booking instead.';
   if (coll === 'visits' && f === 'status' && o.client && clientById[o.client]) return 'This visit is linked to a client folder, so its status follows the folder (Hold, Converted or Lapsed). Change it from the client folder.';
   if (ROLE() !== 'Agent') return null;
   if (coll === 'visits' && f === 'status' && isConvertedVisit(o)) return 'This visit is Converted. Only Admin or Super admin can change it.';
@@ -654,15 +668,15 @@ const crumbs = parts => `<div class="crumbs">${parts.map(([l, h]) => h ? `<a dat
 const folderCard = (href, title, sub) => `<a class="folder" data-go="${href}">${ico('folder')}<div><b>${esc(title)}</b><span>${esc(sub)}</span></div></a>`;
 const kv = pairs => `<div class="grid2">${pairs.map(([k, v]) => `<div class="kv"><small>${esc(k)}</small><div>${v}</div></div>`).join('')}</div>`;
 function renderNav(cur) {
-  const NAV = [['visits', 'Site visits', 'pin', D.visits.length], ['clients', 'Clients', 'users', D.clients.length], ['plots', 'Plots', 'grid', Object.keys(D.plots).length],
-    ['landowners', 'Sold plots', 'land', D.landowners.length], ['partner', 'Land partner', 'hand'], ['contractors', 'Contractors', 'tool', D.contractors.length],
+  const NAV = [['visits', 'Site visits', 'pin', D.visits.filter(v => vStatus(v)[0] !== 'Lapsed').length], ['clients', 'Clients', 'users', D.clients.filter(c => clientStatus(c)[0] !== 'Lapsed').length], ['plots', 'Plots', 'grid', Object.keys(D.plots).length],
+    ['landowners', 'Sold plots', 'land', new Set([...Object.values(D.plots).filter(p => plotClass(p)[1] === 'Sold').map(p => p.no), ...Object.keys(landByPlot())]).size], ['partner', 'Land partner', 'hand'], ['contractors', 'Contractors', 'tool', D.contractors.length],
     ['expenses', 'Site expenses', 'coins', D.expenses.length], ['incentives', 'Incentives', 'award', D.incentives.length]];
   $('#nav').innerHTML = '<div class="navlabel">Files</div>' + NAV.map(([k, l, i, c]) => `<a class="${cur === k ? 'on' : ''}" data-go="#/${k}">${ico(i)}${esc(l)}${c != null ? `<span class="ct">${c}</span>` : ''}</a>`).join('') +
     `<div class="navlabel">Admin</div>${ME.role !== 'Agent' ? `<a class="${cur === 'users' ? 'on' : ''}" data-go="#/users">${ico('users')}Users</a>` : ''}<a class="${cur === 'history' ? 'on' : ''}" data-go="#/history">${ico('clock')}Edit history<span class="ct">${store.edits.filter(e => !e.undone).length}</span></a><a class="${cur === 'check' ? 'on' : ''}" data-go="#/check">${ico('check')}Data check<span class="ct">${D.payments.filter(p => !p.clients.length).length}</span></a>${canDelete() ? `<a class="${cur === 'trash' ? 'on' : ''}" data-go="#/trash">${ico('clock')}Deleted items</a>` : ''}${canExport() ? `<a data-expall>${ico('check')}Export all to Excel</a>` : ''}`;
 }
 const V = {};
 const plotView = {mode: 'list', hl: new Set(), before: false, after: true};
-const listView = {visitsLapsed: false, clientGroups: {Booked: true, 'On hold': true, Lapsed: false}};
+const listView = {soldReg: '', visitsLapsed: false, clientGroups: {Booked: true, 'On hold': true, Lapsed: false}};
 const clientSel = {};
 
 // ---------- Site visits ----------
@@ -935,12 +949,28 @@ V.plot = no => {
 
 // ---------- Landowners / partner ----------
 V.landowners = () => {
+  const reg = landByPlot();
+  const nos = [...new Set([...Object.values(D.plots).filter(p => plotClass(p)[1] === 'Sold').map(p => p.no), ...Object.keys(reg)])];
+  const rows = nos.map(no => ({no, p: D.plots[no], l: reg[no] || null, c: plotOwner[no] ? clientById[plotOwner[no]] : null, b: (plotBk[no] || {}).conv || null}))
+    .sort((a, b) => (isPrePlot(a.p || {}) - isPrePlot(b.p || {})) || ((plotSr.get(a.no) || 9999) - (plotSr.get(b.no) || 9999)));
+  rows.forEach((r, i) => r.sr = i + 1);
+  const inReg = rows.filter(r => r.l).length;
+  const pick = listView.soldReg; const shown = EXPORT_ALL || !pick ? rows : rows.filter(r => pick === 'in' ? r.l : !r.l);
   const t = tbl('landowners', [
-    {k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'plot', label: 'Plot', get: x => x.plot, cell: x => ed('landowners', x, 'plot')},
-    {k: 'owner', label: 'Owner', get: x => x.owner, cell: x => ed('landowners', x, 'owner')}, {k: 'sq', label: 'Sq yd', type: 'num', get: x => x.sqYard, cell: x => ed('landowners', x, 'sqYard', 'number')},
-    {k: 'sale', label: 'Total sale value', type: 'money', get: x => x.saleValue, cell: x => ed('landowners', x, 'saleValue', 'money')},
-    {k: 'paid', label: 'Paid', type: 'money', get: x => x.anjaneePaid, cell: x => ed('landowners', x, 'anjaneePaid', 'money')}], D.landowners, {rowGo: x => '#/plot/' + encodeURIComponent(x.plot), totals: ['sale', 'paid'], noun: 'plots', order: (a, b) => a.sr - b.sr});
-  return crumbs([['Files'], ['Sold plots']]) + `<h1>Sold plots</h1><p class="sub">Plots sold to buyers, as in the "DASTAVEJ PAYMENT" sheet.</p>
+    {k: 'sr', label: 'Sr.', type: 'num', nofilter: true, get: r => r.sr},
+    {k: 'plot', label: 'Plot', type: 'num', get: r => parseInt(r.no) || null, cell: r => `<b>${esc(r.no)}</b>`},
+    {k: 'phase', label: 'Phase', get: r => r.p && isPrePlot(r.p) ? 'Before TRPL' : 'TRPL'},
+    {k: 'owner', label: 'Owner', get: r => r.l ? r.l.owner : r.c ? r.c.name : null, cell: r => r.l ? ed('landowners', r.l, 'owner') : esc(r.c ? r.c.name : '—')},
+    {k: 'client', label: 'Client folder', get: r => r.c ? r.c.name : null, cell: r => r.c ? `<a data-go="#/client/${r.c.id}" style="color:var(--accent);cursor:pointer">${esc(r.c.name)}</a>` : '<span class="muted">—</span>'},
+    {k: 'sq', label: 'Sq yd', type: 'num', get: r => r.l && r.l.sqYard != null ? r.l.sqYard : r.p ? r.p.area : null},
+    {k: 'final', label: 'Final amount', type: 'money', get: r => r.b ? r.b.finalAmount : null},
+    {k: 'sale', label: 'Total sale value', type: 'money', get: r => r.l ? r.l.saleValue : null, cell: r => r.l ? ed('landowners', r.l, 'saleValue', 'money') : '<span class="muted">—</span>'},
+    {k: 'paid', label: 'Paid (register)', type: 'money', get: r => r.l ? r.l.anjaneePaid : null, cell: r => r.l ? ed('landowners', r.l, 'anjaneePaid', 'money') : '<span class="muted">—</span>'},
+    {k: 'reg', label: 'Dastavej register', get: r => r.l ? 'In register' : 'Not in register'}
+  ], shown, {rowGo: r => '#/plot/' + encodeURIComponent(r.no), totals: ['final', 'sale', 'paid'], noun: 'sold plots', title: 'Sold plots'});
+  const chip = (k, label, n) => `<span class="chip${(pick || '') === k ? ' on' : ''}" data-lv="soldReg" data-val="${k}">${label} <span class="muted">${n}</span></span>`;
+  return crumbs([['Files'], ['Sold plots']]) + `<h1>Sold plots</h1><p class="sub">Every sold plot: the plots that are Sold in Plots, plus any plot in the "DASTAVEJ PAYMENT" register. Sale value and Paid (register) come from that register.</p>
+  <div class="row" style="gap:6px;margin:-4px 0 14px">${chip('', 'All sold plots', rows.length)}${chip('in', 'In Dastavej register', inReg)}${chip('out', 'Not in register', rows.length - inReg)}</div>
   <div class="split"><div>${t.html}</div><div>${dropzone('landowners', 'Sold plot documents')}</div></div>`;
 };
 V.partner = () => {
@@ -1269,8 +1299,34 @@ V.check = () => {
   <div class="card"><h2>Fixed while loading</h2><ul style="margin:0;padding-left:18px;color:var(--ink2)"><li>Dates that Excel had read with day and month swapped were corrected.</li><li>Phone numbers stored as numbers were turned back into 10-digit numbers.</li><li>Agent names written in different ways were merged (for example LAKSHIT, Lakhshit and Lakshit).</li><li>"Done" in the visit list is shown as "Converted".</li></ul></div>
   <h2 style="font-size:15px;margin:0 0 8px">${un.length} payments not linked to a client</h2>
   ${tbl('unlinked', [{k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date}, {k: 'text', label: 'Entry in sheet', get: p => p.text}, {k: 'amt', label: 'Amount', type: 'money', get: p => p.amount}], un, {totals: ['amt'], totalIf: received, noun: 'payments'}).html}
+  ${problems()}
   ${S.registerPlotsNotInPlotList.length ? `<div class="card"><h2>Plot numbers in the registers that are not in the Plot List</h2><p class="muted" style="margin:0">${S.registerPlotsNotInPlotList.map(esc).join(', ')}</p></div>` : ''}`;
 };
+
+function problems() {
+  const go = (h, s) => `<a data-go="${h}" style="color:var(--accent);cursor:pointer">${esc(s)}</a>`;
+  const cl = c => go('#/client/' + c.id, c.name);
+  const P = Object.values(D.plots);
+  const items = [
+    ['Plots marked Sold with no Converted booking', P.filter(p => /SOLD/i.test(p.status || '') && !/UNSOLD/i.test(p.status || '') && !(plotBk[p.no] || {}).conv && !isPrePlot(p) && !landByPlot()[p.no]).map(p => go('#/plot/' + encodeURIComponent(p.no), 'Plot ' + p.no + (p.note ? ' (' + p.note + ')' : ''))),
+      'The Plot List says Sold, but every booking on it is Lapsed. Either the buyer\'s booking should be Converted, or the plot should be Unsold.'],
+    ['Plots marked Hold in the Plot List but with a Converted booking', P.filter(p => /HOLD/i.test(p.status || '') && (plotBk[p.no] || {}).conv).map(p => go('#/plot/' + encodeURIComponent(p.no), 'Plot ' + p.no + ' → ' + plotBk[p.no].conv.client)),
+      'Now shown as Sold everywhere, because the booking is Converted.'],
+    ['Holds with no plot number', D.bookings.filter(b => !b.plot && /hold/i.test(b.outcome || '')).map(b => { const c = D.clients.find(x => x.bookings.includes(b.id)); return c ? cl(c) : esc(b.client || ''); }),
+      'Add the plot number on the booking (client folder → pencil), or mark the hold Lapsed.'],
+    ['Booked clients with no final amount', D.clients.filter(c => clientStatus(c)[0] === 'Booked' && !clientFinal(c)).map(cl), 'Remaining balance can\'t be worked out until the final amount is filled in.'],
+    ['Clients who paid more than the final amount', D.clients.filter(c => clientFinal(c) && paidOf(clientPayments(c.id)) > clientFinal(c)).map(c => cl(c) + ` <span class="muted">(${inr(paidOf(clientPayments(c.id)) - clientFinal(c))} extra)</span>`),
+      'Usually the ₹1,100 hold amount counted on top of the final amount. Check the final amount or the payments.'],
+    ['Lapsed clients with money paid and no refund marked', D.clients.filter(c => clientStatus(c)[0] === 'Lapsed' && paidOf(clientPayments(c.id)) > 1100 && !c.bookings.some(id => /^refunded/i.test(bookingById[id].refunded || ''))).map(c => cl(c) + ` <span class="muted">(${inr(paidOf(clientPayments(c.id)))})</span>`),
+      'Their hold lapsed but more than the hold amount was paid. Check whether they actually bought another plot, or mark the refund.'],
+    ['Old owners with no booking', Object.entries(D.plotOwners).filter(([pl, id]) => clientById[id] && !(plotBk[pl] || {}).conv).map(([pl, id]) => cl(clientById[id]) + ' <span class="muted">(plot ' + esc(pl) + ')</span>'),
+      'These came from the Dastavej or Registry sheets, not from a booking.'],
+    ['Client folders with no site visit linked', D.clients.filter(c => !D.visits.some(v => v.client === c.id)).map(cl),
+      'Their visit is not in the site visit sheet under the same phone number (often older buyers or broker clients). Nothing breaks; the visit list just doesn\'t show them.']
+  ];
+  return `<div class="card"><h2>Needs a look</h2><p class="muted" style="margin:0 0 10px">Things the sheets disagree about. The app now handles them consistently, but someone who knows the deal should confirm.</p>
+    ${items.map(([h, list, why]) => `<div style="padding:10px 0;border-top:1px solid var(--line)"><b>${h}</b> <span class="badge ${list.length ? 'b-hold' : 'b-sold'}">${list.length}</span><div class="muted" style="font-size:12.5px;margin:3px 0 6px">${why}</div>${list.length ? `<div style="font-size:13px;line-height:1.9">${list.join(' · ')}</div>` : ''}</div>`).join('')}</div>`;
+}
 
 // ---------- router ----------
 function render() {
@@ -1314,7 +1370,7 @@ document.addEventListener('click', e => {
   const hl = t.closest('[data-hl]'); if (hl) { const k = hl.dataset.hl; if (!k) plotView.hl.clear(); else if (plotView.hl.has(k)) plotView.hl.delete(k); else plotView.hl.add(k); render(); return; }
   const fl = t.closest('[data-flow]'); if (fl) { flowDlg(fl.dataset); return; }
   const cg = t.closest('[data-cgroup]'); if (cg) { const G = listView.clientGroups, k = cg.dataset.cgroup; G[k] = !G[k]; if (!Object.values(G).some(Boolean)) G[k] = true; render(); return; }
-  const lv = t.closest('[data-lv]'); if (lv) { listView[lv.dataset.lv] = !!lv.dataset.val; render(); return; }
+  const lv = t.closest('[data-lv]'); if (lv) { listView[lv.dataset.lv] = lv.dataset.lv === 'soldReg' ? lv.dataset.val : !!lv.dataset.val; render(); return; }
   const ph = t.closest('[data-phase]'); if (ph) { const k = ph.dataset.phase, o = k === 'after' ? 'before' : 'after'; plotView[k] = !plotView[k]; if (!plotView[k] && !plotView[o]) plotView[o] = true; render(); return; }
   const cs = t.closest('[data-csel]'); if (cs) { clientSel[cs.dataset.cid] = cs.dataset.csel; render(); return; }
   const pv = t.closest('[data-pv]'); if (pv) { plotView.mode = pv.dataset.pv; render(); return; }

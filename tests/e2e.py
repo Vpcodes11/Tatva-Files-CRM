@@ -16,7 +16,7 @@ with sync_playwright() as p:
     a.fill('[name=name]','Pratik'); a.fill('[name=username]','pratik'); a.fill('[name=password]','secret123'); a.click('#loginForm button')
     a.wait_for_selector('#nav a', timeout=20000); a.wait_for_timeout(500)
     ok('Pratik' in a.inner_text('#who') and 'Super admin' in a.inner_text('#who'), 'signed in as Super admin')
-    nav=a.inner_text('#nav'); ok('728' in nav and '133' in nav and '415' in nav, 'all data loaded from database: '+nav.replace('\n',' ')[:120])
+    n=a.evaluate("s => __dbg(s)", "[D.visits.length, D.clients.length, Object.keys(D.plots).length]"); ok(n==[728,133,415], 'all data loaded from database: %s' % n)
     # visit all pages
     for h in ['#/visits','#/clients','#/plots','#/landowners','#/partner','#/contractors','#/expenses','#/incentives','#/history','#/check','#/users']:
         a.evaluate("s => __dbg(s)", f"location.hash='{h}'"); a.wait_for_timeout(350)
