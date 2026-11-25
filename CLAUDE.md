@@ -29,5 +29,6 @@ Live: https://tatva-crm.vaistack-cs.workers.dev — every push to `main` deploys
 ## How to work
 1. Make the change locally.
 2. Test: `npm install`, then `npm run db:local` (fresh local D1 from `data/seed.sql`) and `npm run dev` (http://localhost:8787), then `npm run test` (Playwright browser tests in `tests/`, all must pass; `__dbg` is a localhost-only hook the tests use). Add tests for new behaviour.
-3. Commit and push to `main`; check the live site after ~1 minute.
+3. **Push straight to `main` yourself** as soon as all tests pass — don't wait for approval and don't use branches or pull requests (the owner wants every change on GitHub and live right away). Use clear commit messages; one commit per change.
+4. About 1 minute after pushing, check the live site, then tell the owner in plain English what changed and where to see it.
 Data fixes on live data go in the worker as a one-time migration guarded by a `meta` flag (see `migrateVisitRemarks`), never by editing data by hand.
