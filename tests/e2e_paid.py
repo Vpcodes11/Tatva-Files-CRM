@@ -35,7 +35,7 @@ with sync_playwright() as p:
     ok(stat('Paid till now') == '₹5,01,100' and table_total() == '₹5,01,100', 'typed DP 5,00,000 with 3,00,000 paid → only the 2,00,000 not covered is added (%s)' % stat('Paid till now'))
 
     # every folder in the app: Payments table total = Paid till now = Clients list
-    bad = q("""D.clients.filter(c => clientPlots(c).length <= 1).filter(c => { const t = clientPayments(c.id).concat(typedDpRows(c)).filter(received).reduce((s, p) => s + (p.amount || 0), 0);
+    bad = q("""D.clients.filter(c => clientPlots(c).length <= 1).filter(c => { const t = clientPayments(c.id).concat(typedDpRows(c)).filter(received).reduce((s, p) => s + (p.virtual ? p.amount : signedAmt(p)), 0);
       return Math.round(t) !== clientPaid(c); }).map(c => c.name)""")
     ok(not bad, 'all %d single-plot folders: Payments total = Paid till now (mismatches: %s)' % (q("D.clients.filter(c => clientPlots(c).length <= 1).length"), bad))
     ok(q("D.clients.every(c => clientPaid(c) >= Math.round(paidOf(clientPayments(c.id))))"), 'Paid till now is never less than the payments received')

@@ -164,6 +164,18 @@ async function clientIsLapsed(client, getRec) {
   }
   return true;
 }
+// A plot can be lapsed at any stage (hold, DP, booked) until the MOU or the dastavej is done — same rule as
+// docLock() in index.html. Returns the reason it is refused, or null.
+async function lapseRefusal(env, cur, next, getRec) {
+  const active = o => /convert|^booked$|hold/i.test(String(o || ''));
+  if (!cur || !next || !active(cur.outcome) || !/laps/i.test(String(next.outcome || ''))) return null;
+  let client = cur.cid ? await getRec('clients', cur.cid) : null;
+  if (!client) { const r = await env.DB.prepare("SELECT data FROM records WHERE coll = 'clients' AND data LIKE ?").bind('%"' + cur.id + '"%').first(); client = r ? JSON.parse(r.data) : null; }
+  const ds = String((client && client.docStatus) || ''), dv = cur.plot ? await getRec('dastavej', String(cur.plot)) : null;
+  if (dv || /dastavej done/i.test(ds) || /done & sent/i.test(cur.dastavejStatus || '')) return 'This plot cannot be lapsed: the dastavej is done.';
+  if (/^(mou done|dastavej)/i.test(ds) || /mou done/i.test(cur.mou || '') || /done|office/i.test(cur.dastavejStatus || '')) return 'This plot cannot be lapsed: the MOU is done.';
+  return null;
+}
 function lockError(user, coll, current, next) {
   if (user.role !== 'Agent') return null;
   if (coll === 'visits' && current && isConvertedVisitStatus(current.status) && next && !isConvertedVisitStatus(next.status))
@@ -307,6 +319,7 @@ async function apiOps(env, req, user) {
       }
       const lock = lapsedVisit ? null : lockError(user, op.coll, cur, next);
       if (lock) return fail(403, lock);
+      if (op.coll === 'bookings') { const no = await lapseRefusal(env, cur, next, getRec); if (no) return fail(403, no); }
       working[key] = next;
       stmts.push(env.DB.prepare('UPDATE records SET data = ?, updated_at = ?, updated_by = ? WHERE coll = ? AND id = ?')
         .bind(JSON.stringify(next), now(), user.name, op.coll, op.id));
@@ -320,6 +333,7 @@ async function apiOps(env, req, user) {
       const cur = working[key] || await getRec(op.coll, op.id);
       const lock = lockError(user, op.coll, cur, data);
       if (lock) return fail(403, lock);
+      if (op.coll === 'bookings') { const no = await lapseRefusal(env, cur, data, getRec); if (no) return fail(403, no); }
       if (op.grp && cur != null) {
         if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can delete.');
         stmts.push(env.DB.prepare('INSERT INTO trash (grp, coll, rec_id, kind, data, label, user_id, user_name) VALUES (?,?,?,?,?,?,?,?)')

@@ -1,0 +1,77 @@
+# Lapsing a plot at any stage (hold, hold + DP, booked) until the MOU / dastavej is done, with no / full / part refund.
+# A refund is saved as a payment (money going out). Run against `npm run dev` after tests/e2e.py (pratik / secret123).
+from playwright.sync_api import sync_playwright
+U = 'http://localhost:8787/'; E = "s => __dbg(s)"
+def ok(c, m): print(('PASS ' if c else 'FAIL ') + m)
+with sync_playwright() as p:
+    b = p.chromium.launch(executable_path='/usr/bin/google-chrome'); errs = []
+    a = b.new_context(viewport={'width': 1500, 'height': 1000}).new_page(); a.on('pageerror', lambda x: errs.append(str(x)))
+    def login(pg, u, pw):
+        pg.goto(U); pg.wait_for_selector('#loginForm'); pg.fill('[name=username]', u); pg.fill('[name=password]', pw); pg.click('#loginForm button'); pg.wait_for_selector('#nav a', timeout=20000)
+    login(a, 'pratik', 'secret123')
+    q = lambda js: a.evaluate(E, js)
+    def go(h): q(f"location.hash='{h}'"); a.wait_for_timeout(400)
+    def reload(h): a.reload(); a.wait_for_selector('#nav a'); go(h)
+    stat = lambda lab: q(f"[...document.querySelectorAll('.stats .stat')].find(s => s.querySelector('small').textContent.startsWith('{lab}')).querySelector('div').innerText.trim()")
+    pay_total = lambda: q("[...document.querySelectorAll('tfoot')].filter(t => !t.closest('.dpop')).pop().innerText.replace(/\\s+/g, ' ').trim().split(' ').pop()")
+    def hold(name, phone):
+        go('#/visits'); a.click('[data-addvisit]'); a.fill('#nv_name', name); a.fill('#nv_phone', phone); a.click('.chips[data-group=agents] .chip >> nth=0'); a.click('[data-chip=Hold]')
+        pl = q("freePlots()[0].no"); a.select_option('#nv_plot', pl); a.click('[data-dlgok]'); a.wait_for_timeout(1500)
+        cid = q(f"D.clients.find(c => c.phone === '{phone}').id"); return pl, cid, q(f"D.bookings.find(x => x.cid === '{cid}').id")
+    bk = lambda bid, f: q(f"IDX.bookings['{bid}'].{f}")
+
+    # 1. hold + DP, client backs out, part refund
+    pl, cid, bid = hold('Lapse One', '9666600001'); h = f'#/client/{cid}'; reload(h)
+    a.click('[data-flow=dp]'); a.fill('#fd_amt', '200000'); a.click('[data-dlgok]'); a.wait_for_timeout(1300); reload(h)
+    ok('Lapsed' in q("[...document.querySelectorAll('.acts button')].map(x => x.textContent)") and 'DP paid: ₹2,00,000' in q("document.querySelector('.acts').innerText"), 'on hold with a DP: the Lapsed button is there')
+    a.click('.acts [data-flow=lapse]'); a.wait_for_timeout(200)
+    ok('₹2,01,100' in q("document.querySelector('.dlg .bsum').innerText"), 'lapse form shows what was paid for the plot (₹2,01,100)')
+    ok(not a.is_visible('#fl_ramt'), 'No refund is the default; refund boxes hidden')
+    a.click('[data-chip=part]'); a.wait_for_timeout(100); a.fill('#fl_ramt', '150000'); a.select_option('#fl_rmode', 'Online'); a.fill('#fl_reason', 'client backed out'); a.wait_for_timeout(100)
+    ok('₹51,100' in q("document.querySelector('#fl_kept').innerText"), 'part refund 1,50,000 → company keeps ₹51,100')
+    a.click('[data-dlgok]'); a.wait_for_timeout(1500); reload(h)
+    ok([bk(bid, 'outcome'), bk(bid, 'lapseReason'), bk(bid, 'refunded'), bk(bid, 'refundAmount'), bk(bid, 'refundMode')] == ['Lapsed', 'client backed out', 'Refunded', 150000, 'Online'], 'booking: Lapsed, reason, part refund saved')
+    ok(q(f"plotClass(D.plots['{pl}'])[1]") == 'Unsold' and q(f"clientStatus(clientById['{cid}'])[0]") == 'Lapsed', 'plot is Unsold again and the client is Lapsed')
+    ok(stat('Paid till now') == '₹51,100' and pay_total() == '₹51,100' and '−₹1,50,000' in q("[...document.querySelectorAll('tbody')].pop().innerText"), 'Paid till now ₹51,100; the refund is a −₹1,50,000 row in Payments')
+    ok('Kept by the company: ₹51,100' in q("document.querySelector('.pcols').innerText") and 'client backed out' in q("document.querySelector('#view').innerText"), 'folder shows the kept amount and the reason')
+    go('#/plots'); ok(q(f"TABLES.plots.cols.find(c => c.k === 'booking').get(D.plots['{pl}'])") == 'Available', 'Plots: the plot shows Available')
+
+    # 2. booked, then lapsed with a full refund (Admin / Super admin)
+    pl2, cid2, bid2 = hold('Lapse Two', '9666600002'); h2 = f'#/client/{cid2}'; reload(h2)
+    a.click('.acts [data-flow=book]'); a.fill('#fb_final', '1000000'); a.fill('#fb_amt', '100000'); a.select_option('#fb_mode', 'Online'); a.wait_for_timeout(100)
+    ok(not a.is_visible('#fb_cname'), 'Book form: no cheque boxes when the booking is paid Online')
+    a.select_option('#fb_mode', 'Cheque'); a.wait_for_timeout(100); ok(a.is_visible('#fb_cname') and a.is_visible('#fb_cno') and a.is_visible('#fb_cbank'), '… they appear for Cheque')
+    a.fill('#fb_cname', 'Lapse Two'); a.fill('#fb_cno', '778899'); a.fill('#fb_cbank', 'SBI'); a.click('[data-dlgok]'); a.wait_for_timeout(1500); reload(h2)
+    ok([bk(bid2, 'chequeName'), bk(bid2, 'chequeNumber'), bk(bid2, 'chequeBank')] == ['Lapse Two', '778899', 'SBI'], 'cheque details from the Book form are saved')
+    ok('can still back out until the MOU is done' in q("document.querySelector('#view').innerText") and q("!!document.querySelector('.acts-n [data-flow=lapse]')"), 'booked: "Lapsed" is still offered until the MOU is done')
+    a.click('.acts-n [data-flow=lapse]'); a.wait_for_timeout(200); a.click('[data-chip=yes]'); a.wait_for_timeout(100)
+    ok(q("document.querySelector('#fl_ramt').value") == '101100' and q("document.querySelector('#fl_ramt').disabled"), 'full refund = everything paid (₹1,01,100)')
+    a.click('[data-dlgok]'); a.wait_for_timeout(1500); reload(h2)
+    ok(bk(bid2, 'outcome') == 'Lapsed' and q(f"plotClass(D.plots['{pl2}'])[1]") == 'Unsold' and not q(f"plotOwner['{pl2}']"), 'booked plot lapsed: Unsold and no longer the client’s')
+    ok(stat('Paid till now') == '₹0' and q(f"D.visits.filter(v => v.client === '{cid2}').every(v => vStatus(v)[0] === 'Lapsed')"), 'everything refunded: Paid till now ₹0; the site visit moved to Lapsed')
+
+    # 3. MOU done → can no longer be lapsed (screen and server)
+    pl3, cid3, bid3 = hold('Lapse Three', '9666600003'); h3 = f'#/client/{cid3}'; reload(h3)
+    a.click('.acts [data-flow=book]'); a.fill('#fb_final', '900000'); a.click('[data-dlgok]'); a.wait_for_timeout(1500)
+    q(f"sendOps([{{op: 'patch', coll: 'clients', id: '{cid3}', field: 'docStatus', value: 'MOU done'}}])"); a.wait_for_timeout(800); reload(h3)
+    ok(not q("!!document.querySelector('[data-flow=lapse]')") and 'Can no longer be lapsed: the MOU is done' in q("document.querySelector('#view').innerText"), 'MOU done: no Lapsed button, says why')
+    r = q(f"fetch('/api/ops', {{method: 'POST', headers: {{'content-type': 'application/json'}}, body: JSON.stringify({{ops: [{{op: 'patch', coll: 'bookings', id: '{bid3}', field: 'outcome', value: 'Lapsed'}}]}})}}).then(r => r.status)")
+    ok(r == 403, 'server refuses to lapse a plot whose MOU is done (%s)' % r)
+    old = q("(D.bookings.find(b => isConvertedBooking(b) && b.plot && D.dastavej[b.plot]) || {}).id")
+    r = q(f"fetch('/api/ops', {{method: 'POST', headers: {{'content-type': 'application/json'}}, body: JSON.stringify({{ops: [{{op: 'patch', coll: 'bookings', id: '{old}', field: 'outcome', value: 'Lapsed'}}]}})}}).then(r => r.status)")
+    ok(r == 403, 'server refuses to lapse a plot with a dastavej (%s)' % r)
+
+    # 4. an Agent can lapse a hold but not a booked plot
+    ok(q("fetch('/api/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Lapse Agent 2',username:'lapseagent2',role:'Agent',password:'pass1234'})}).then(r=>r.status)") in (200, 201), 'added an Agent')
+    pl4, cid4, bid4 = hold('Lapse Four', '9666600004'); reload(f'#/client/{cid4}')
+    a.click('.acts [data-flow=book]'); a.fill('#fb_final', '900000'); a.click('[data-dlgok]'); a.wait_for_timeout(1500)
+    g = b.new_context(viewport={'width': 1500, 'height': 1000}).new_page(); g.on('pageerror', lambda x: errs.append(str(x))); login(g, 'lapseagent2', 'pass1234')
+    g.evaluate(E, f"location.hash='#/client/{cid4}'"); g.wait_for_timeout(400)
+    ok(not g.evaluate(E, "!!document.querySelector('[data-flow=lapse]')") and 'Only Admin or Super admin can lapse a booked plot' in g.evaluate(E, "document.querySelector('#view').innerText"), 'Agent: no Lapsed button on a booked plot')
+    r = g.evaluate(E, f"fetch('/api/ops', {{method: 'POST', headers: {{'content-type': 'application/json'}}, body: JSON.stringify({{ops: [{{op: 'patch', coll: 'bookings', id: '{bid4}', field: 'outcome', value: 'Lapsed'}}]}})}}).then(r => r.status)")
+    ok(r == 403, 'server refuses an Agent lapsing a booked plot (%s)' % r)
+    pl5, cid5, bid5 = hold('Lapse Five', '9666600005'); g.reload(); g.wait_for_selector('#nav a'); g.evaluate(E, f"location.hash='#/client/{cid5}'"); g.wait_for_timeout(400)
+    g.click('.acts [data-flow=lapse]'); g.click('[data-dlgok]'); g.wait_for_timeout(1500)
+    ok(g.evaluate(E, f"IDX.bookings['{bid5}'].outcome") == 'Lapsed', 'Agent can lapse a plot that is only on hold')
+    for hh in ['#/clients', '#/plots', '#/check', '#/history']: go(hh)
+    ok(not errs, 'no page errors (%s)' % errs)
