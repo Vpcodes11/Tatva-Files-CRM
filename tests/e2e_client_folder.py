@@ -47,6 +47,7 @@ with sync_playwright() as p:
     sec = q("[...document.querySelectorAll('.dlg .sec2')].map(x => x.textContent)")
     groups = q("[...document.querySelectorAll('.dlg .sec2')].map(h => [...h.nextElementSibling.querySelectorAll(':scope > label')].filter(l => l.offsetParent !== null).map(l => l.childNodes[0].textContent.trim()))")
     ok(sec[:2] == ['Hold', 'Booking'] and groups[0] == ['Hold date', 'Hold amount', 'Hold mode'] and groups[1][:3] == ['Booking date', 'Booking amount', 'Booking mode'], 'pencil form is split under HOLD and BOOKING headings: %s' % list(zip(sec, groups)))
+    ok(q("getComputedStyle(document.querySelector('.dlg .sec2')).color") == 'rgb(138, 90, 43)', 'form headings are brown')
     chq_vis = lambda: q("[...document.querySelectorAll('.dlg label')].filter(l => /^(Cheque name|Cheque number|Bank name)/.test(l.textContent.trim()) && l.offsetParent !== null).length")
     ok(chq_vis() == 0, 'pencil: cheque boxes hidden while Booking mode is UPI')
     a.select_option(".dlg label:has-text('Booking mode') select", 'Cheque'); a.wait_for_timeout(100)
