@@ -22,7 +22,7 @@ with sync_playwright() as p:
     ids = a.evaluate(E, "[...document.querySelectorAll('.dlg input,.dlg textarea,.dlg select')].map(x => x.id)")
     ok(not any(i in ids for i in ['nv_extra', 'nv_fu1d', 'nv_fu1n', 'nv_by']), 'add-visit form has only one Remark, no Note or follow-up fields')
     chips = a.evaluate(E, "[...document.querySelectorAll('.dlg .chips[data-group=deal] .chip')].map(c => c.dataset.chip)")
-    ok(chips == ['Follow up', 'Converted', 'Lapsed', 'Hold', 'Book'], 'status row: %s' % chips)
+    ok(chips == ['Follow up', 'Booked', 'Lapsed', 'Hold', 'Book'], 'status row: %s' % chips)
     a.fill('#nv_name', 'Two Agent Test'); a.fill('#nv_phone', '9222233333')
     a.click('.chips[data-group=agents] .chip >> nth=0'); a.click('.chips[data-group=agents] .chip >> nth=1'); a.click('[data-chip="Lapsed"]')
     a.fill('#nv_remark', 'came with family, liked corner plots'); a.click('[data-dlgok]'); a.wait_for_timeout(1500)
@@ -32,7 +32,7 @@ with sync_playwright() as p:
     # Book straight from the add-visit form
     a.click('[data-addvisit]'); a.fill('#nv_name', 'Book Test'); a.click('.chips[data-group=agents] .chip >> nth=0'); a.click('[data-chip=Book]')
     pl = a.evaluate(E, "freePlots()[0].no"); a.select_option('#nv_plot', pl); a.fill('#nv_final', '900000'); a.click('[data-dlgok]'); a.wait_for_timeout(1500)
-    ok(a.evaluate(E, f"D.plots['{pl}'].status") == 'SOLD OUT' and a.evaluate(E, "vStatus(D.visits.find(x => x.name === 'Book Test'))[0]") == 'Converted', 'Book from the form books the plot and converts the visit')
+    ok(a.evaluate(E, f"D.plots['{pl}'].status") == 'SOLD OUT' and a.evaluate(E, "vStatus(D.visits.find(x => x.name === 'Book Test'))[0]") == 'Booked', 'Book from the form books the plot and marks the visit')
     # agents can be changed with the pencil (multi)
     a.evaluate(E, "location.hash='#/visits'"); a.wait_for_timeout(300)
     # 3: lapsed — the Site visits Lapsed tab lists every Lapsed visit (incl. visits of lapsed clients)
@@ -46,7 +46,7 @@ with sync_playwright() as p:
     a.click('[data-lv=visitsLapsed][data-val=""]'); a.wait_for_timeout(300)
     st = a.evaluate(E, "[...new Set(D.visits.filter(v => vStatus(v)[0] !== 'Lapsed').map(v => vStatus(v)[0]))].sort()")
     ok('Lapsed' not in st and 'Follow up 2' in st and 'Hold' in st, 'Follow up tab statuses: %s' % st)
-    mism = a.evaluate(E, "D.visits.filter(v => v.client && clientById[v.client]).filter(v => { const c = clientStatus(clientById[v.client])[0]; const s = vStatus(v)[0]; return !((c==='Booked'&&s==='Converted')||(c==='On hold'&&s==='Hold')||(c==='Lapsed'&&s==='Lapsed')); }).length")
+    mism = a.evaluate(E, "D.visits.filter(v => v.client && clientById[v.client]).filter(v => { const c = clientStatus(clientById[v.client])[0]; const s = vStatus(v)[0]; return !((c==='Booked'&&s==='Booked')||(c==='On hold'&&s==='Hold')||(c==='Lapsed'&&s==='Lapsed')); }).length")
     ok(mism == 0, 'every linked visit shows its client folder status (mismatches: %d)' % mism)
     # 6 + 8: clients
     a.evaluate(E, "location.hash='#/clients'"); a.wait_for_timeout(400)

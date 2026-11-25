@@ -27,7 +27,34 @@ async function ensureSchema(env) {
   await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
   await migrateVisitRemarks(env);
   await migrateBookingAmounts(env);
+  await migrateConvertedToBooked(env);
   schemaReady = true;
+}
+
+// One-time change (Nov 2026): the word "Converted" is now "Booked" everywhere. Saved booking statuses
+// (Converted → Booked), visit statuses (Converted / DONE → Booked) and the same values in the edit history
+// (so Undo puts back "Booked") are renamed.
+async function migrateConvertedToBooked(env) {
+  const done = await env.DB.prepare("SELECT value FROM meta WHERE key = 'migr_converted_booked'").first('value');
+  if (done) return;
+  const stmts = [];
+  for (const [coll, field, test] of [['bookings', 'outcome', v => /convert/i.test(v)], ['visits', 'status', v => /convert/i.test(v) || /^done$/i.test(v)]]) {
+    const rows = (await env.DB.prepare('SELECT id, data FROM records WHERE coll = ?').bind(coll).all()).results;
+    for (const r of rows) {
+      const d = JSON.parse(r.data);
+      if (!test(String(d[field] || ''))) continue;
+      d[field] = 'Booked';
+      stmts.push(env.DB.prepare("UPDATE records SET data = ?, updated_by = 'update' WHERE coll = ? AND id = ?").bind(JSON.stringify(d), coll, r.id));
+    }
+  }
+  const n = stmts.length;
+  stmts.push(env.DB.prepare(`UPDATE edits SET old = '"Booked"' WHERE coll IN ('bookings', 'visits') AND field IN ('outcome', 'status') AND (old LIKE '%onverted%' OR old = '"DONE"')`));
+  stmts.push(env.DB.prepare(`UPDATE edits SET new = '"Booked"' WHERE coll IN ('bookings', 'visits') AND field IN ('outcome', 'status') AND (new LIKE '%onverted%' OR new = '"DONE"')`));
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('migr_converted_booked', ?)").bind(String(n)),
+    env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'")
+  ]);
 }
 
 // One-time change (Nov 2026): the client folder now has separate Booking date / amount / mode. Bookings made in
@@ -40,7 +67,7 @@ async function migrateBookingAmounts(env) {
   const [bookings, payments] = [await all('bookings'), await all('payments')];
   const stmts = [];
   for (const b of bookings) {
-    if (!b.added || !b.dpAmount || b.bookingAmount != null || !/convert/i.test(b.outcome || '')) continue;
+    if (!b.added || !b.dpAmount || b.bookingAmount != null || !isConvertedOutcome(b.outcome)) continue;
     const paid = payments.some(p => /^booking amount/i.test(p.text || '') && p.amount === b.dpAmount && (p.plots || []).includes(b.plot) && (p.clients || []).includes(b.cid));
     if (!paid) continue;
     Object.assign(b, {bookingAmount: b.dpAmount, bookingDate: b.dpDate ?? null, bookingMode: b.dpMode ?? null, dpAmount: null, dpDate: null, dpMode: null});
@@ -123,25 +150,26 @@ async function currentUser(env, req) {
   return row || null;
 }
 
-// The same lock rules the screen shows: an Agent cannot change a Converted visit or booking.
-const isConvertedVisitStatus = s => { const x = String(s || '').toUpperCase(); return !x.includes('NOT') && !x.includes('FOLLOW') && (x === 'DONE' || x.includes('CONVERT')); };
-const isConvertedOutcome = s => /convert/i.test(String(s || ''));
-// Same rule as clientStatus() in index.html: Lapsed = has bookings, none Converted and none on hold.
+// The same lock rules the screen shows: an Agent cannot change a Booked visit or booking.
+// ("Converted" was renamed "Booked" in Nov 2026; both words are understood.)
+const isConvertedVisitStatus = s => { const x = String(s || '').toUpperCase(); return !x.includes('NOT') && !x.includes('FOLLOW') && (x === 'DONE' || x === 'BOOKED' || x.includes('CONVERT')); };
+const isConvertedOutcome = s => /convert|^booked$/i.test(String(s || ''));
+// Same rule as clientStatus() in index.html: Lapsed = has bookings, none Booked and none on hold.
 async function clientIsLapsed(client, getRec) {
   const ids = Array.isArray(client.bookings) ? client.bookings : [];
   if (!ids.length) return false;
   for (const id of ids) {
     const o = String(((await getRec('bookings', id)) || {}).outcome || '').toLowerCase();
-    if (o.startsWith('convert') || o.includes('hold')) return false;
+    if (o.startsWith('convert') || o === 'booked' || o.includes('hold')) return false;
   }
   return true;
 }
 function lockError(user, coll, current, next) {
   if (user.role !== 'Agent') return null;
   if (coll === 'visits' && current && isConvertedVisitStatus(current.status) && next && !isConvertedVisitStatus(next.status))
-    return 'This visit is Converted. Only Admin or Super admin can change it.';
+    return 'This visit is Booked. Only Admin or Super admin can change it.';
   if (coll === 'bookings' && current && isConvertedOutcome(current.outcome) && next && !isConvertedOutcome(next.outcome))
-    return 'This booking is Converted. Only Admin or Super admin can change it.';
+    return 'This plot is Booked. Only Admin or Super admin can change the booking status.';
   return null;
 }
 

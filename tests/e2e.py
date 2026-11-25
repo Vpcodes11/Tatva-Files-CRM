@@ -45,7 +45,7 @@ with sync_playwright() as p:
     ok(g.evaluate("s => __dbg(s)", "D.visits.find(v=>v.id==='%s').name"%vid)=='Edited By Test', 'Agent sees the change made by Super admin')
     conv=g.evaluate("s => __dbg(s)", "D.visits.find(v=>isConvertedVisit(v)).id")
     r=g.evaluate("s => __dbg(s)", """fetch('/api/ops',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ops:[{op:'patch',coll:'visits',id:'%s',field:'status',value:'Follow up'}]})}).then(r=>r.status)"""%conv)
-    ok(r==403, 'server blocks an Agent changing a Converted visit (status %s)'%r)
+    ok(r==403, 'server blocks an Agent changing a Booked visit (status %s)'%r)
     r=g.evaluate("s => __dbg(s)", "fetch('/api/users').then(r=>r.status)"); ok(r==403, 'server blocks an Agent from the users list')
     r=g.evaluate("s => __dbg(s)", """fetch('/api/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'x',username:'hacker',role:'Super admin',password:'123456'})}).then(r=>r.status)"""); ok(r==403, 'Agent cannot create users')
     # agent registers a visit with a hold
@@ -68,10 +68,10 @@ with sync_playwright() as p:
     a.reload(); a.wait_for_selector('#nav a'); a.wait_for_timeout(300)
     st=a.evaluate("s => __dbg(s)", f"[clientStatus(clientById['{cid}'])[0], clientFinal(clientById['{cid}']), paidOf(clientPayments('{cid}')), D.plots['{plot}'].status, D.plotOwners['{plot}'], clientById['{cid}'].docStatus]")
     ok(st==['Booked',1500000,351100,'SOLD OUT',cid,'MOU not done'], 'booking and payment saved: %s'%st)
-    vconv=a.evaluate("s => __dbg(s)", "vStatus(D.visits.find(v=>v.name==='Agent Walkin'))[0]"); ok(vconv=='Converted','visit became Converted after booking')
+    vconv=a.evaluate("s => __dbg(s)", "vStatus(D.visits.find(v=>v.name==='Agent Walkin'))[0]"); ok(vconv=='Booked','visit became Booked after booking')
     # agent now cannot change that visit
     r=g.evaluate("s => __dbg(s)", """fetch('/api/ops',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ops:[{op:'patch',coll:'visits',id:'%s',field:'status',value:'Lapsed'}]})}).then(r=>r.status)"""%a.evaluate("s => __dbg(s)", "D.visits.find(v=>v.name==='Agent Walkin').id"))
-    ok(r==403,'Agent blocked from changing the newly Converted visit')
+    ok(r==403,'Agent blocked from changing the newly Booked visit')
     # hold + lapse
     a.click('[data-flow=hold]'); p2=a.evaluate("s => __dbg(s)", "freePlots()[0].no"); a.select_option('#fh_plot',p2); a.click('[data-dlgok]'); a.wait_for_timeout(1200)
     a.click(f'[data-csel="{p2}"]'); a.wait_for_timeout(200); a.click('[data-flow=lapse]'); a.click('[data-chip=yes]'); a.click('[data-dlgok]'); a.wait_for_timeout(1200)

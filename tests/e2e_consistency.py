@@ -16,9 +16,9 @@ with sync_playwright() as p:
     sold_plots = a.evaluate(E, "Object.values(D.plots).filter(p => plotClass(p)[1] === 'Sold').length")
     a.evaluate(E, "location.hash='#/landowners'"); a.wait_for_timeout(300)
     ok(a.evaluate(E, "TABLES.landowners.rows.filter(r => r.p && plotClass(r.p)[1] === 'Sold').length") == sold_plots, 'every Sold plot is in Sold plots (%d)' % sold_plots)
-    ok(a.evaluate(E, "D.bookings.filter(isConvertedBooking).every(b => !b.plot || !D.plots[b.plot] || plotClass(D.plots[b.plot])[1] === 'Sold')"), 'every Converted booking’s plot shows Sold')
+    ok(a.evaluate(E, "D.bookings.filter(isConvertedBooking).every(b => !b.plot || !D.plots[b.plot] || plotClass(D.plots[b.plot])[1] === 'Sold')"), 'every Booked booking’s plot shows Sold')
     ok(a.evaluate(E, "Object.values(D.plots).filter(p => plotClass(p)[1] === 'Hold').every(p => D.bookings.some(b => b.plot === p.no && /hold/i.test(b.outcome || '')))"), 'every Hold plot has an active hold')
-    ok(a.evaluate(E, "D.bookings.filter(isConvertedBooking).every(b => !b.plot || clientById[plotOwner[b.plot]] && clientById[plotOwner[b.plot]].bookings.includes(b.id))"), 'every Converted booking’s plot belongs to that client')
+    ok(a.evaluate(E, "D.bookings.filter(isConvertedBooking).every(b => !b.plot || clientById[plotOwner[b.plot]] && clientById[plotOwner[b.plot]].bookings.includes(b.id))"), 'every Booked booking’s plot belongs to that client')
     held = a.evaluate(E, "new Set(D.clients.filter(c => clientStatus(c)[0] === 'On hold').flatMap(c => c.bookings.map(id => bookingById[id]).filter(b => /hold/i.test(b.outcome || '') && b.plot).map(b => b.plot))).size")
     ok(held == a.evaluate(E, "Object.values(D.plots).filter(p => plotClass(p)[1] === 'Hold').length"), 'plots held by On hold clients = Hold plots (%d)' % held)
     nL = a.evaluate(E, "D.visits.filter(v => vStatus(v)[0] === 'Lapsed').length")
@@ -29,12 +29,12 @@ with sync_playwright() as p:
     pl = a.evaluate(E, "D.bookings.find(isConvertedBooking).plot")
     a.evaluate(E, f"location.hash='#/plot/{pl}'"); a.wait_for_timeout(300)
     ok(a.evaluate(E, f"!!lockReason('plots', D.plots['{pl}'], 'status')"), 'plot status of a sold plot follows its booking (pencil locked)')
-    # changing a booking to Converted with the pencil makes the plot Sold and gives it to the client
+    # changing a booking to Booked with the pencil makes the plot Sold and gives it to the client
     bk = a.evaluate(E, "D.bookings.find(b => /hold/i.test(b.outcome || '') && b.plot).id")
-    a.evaluate(E, f"(async () => {{ await sendOps([{{op: 'patch', coll: 'bookings', id: '{bk}', field: 'outcome', value: 'Converted'}}]); }})()"); a.wait_for_timeout(1200)
+    a.evaluate(E, f"(async () => {{ await sendOps([{{op: 'patch', coll: 'bookings', id: '{bk}', field: 'outcome', value: 'Booked'}}]); }})()"); a.wait_for_timeout(1200)
     a.reload(); a.wait_for_selector('#nav a'); a.wait_for_timeout(300)
     r = a.evaluate(E, f"(() => {{ const b = IDX.bookings['{bk}']; const c = D.clients.find(x => x.bookings.includes(b.id)); return [plotClass(D.plots[b.plot])[1], plotOwner[b.plot] === c.id, clientStatus(c)[0]]; }})()")
-    ok(r == ['Sold', True, 'Booked'], 'booking set to Converted → plot Sold, owned by the client, client Booked: %s' % r)
+    ok(r == ['Sold', True, 'Booked'], 'booking set to Booked → plot Sold, owned by the client, client Booked: %s' % r)
     a.evaluate(E, "location.hash='#/check'"); a.wait_for_timeout(400)
     ok('Needs a look' in a.inner_text('#view') and 'Plot 313' in a.inner_text('#view'), 'Data check lists the disagreements (e.g. plot 313)')
     for h in ['#/visits', '#/clients', '#/plots', '#/landowners', '#/partner', '#/expenses', '#/incentives', '#/check', '#/history', '#/trash']:

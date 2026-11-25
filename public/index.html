@@ -75,7 +75,7 @@ h1{font-size:22px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
 .srcinfo{margin:18px 0 4px;font-size:12.5px;color:var(--ink2)}.srcinfo summary{cursor:pointer;color:var(--ink3);font-size:12px;user-select:none}.srcinfo summary:hover{color:var(--accent)}
 .srcinfo>div{padding:3px 0 3px 14px}
 .grid2.g3{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px}
-.grid2.g3+.grid2.g3{margin-top:12px}
+
 .pcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 32px}.pcols>div{min-width:0}
 @media(max-width:1250px){.pcols{grid-template-columns:1fr}}
 .tgl{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;font:inherit;font-weight:550;color:var(--ink);cursor:pointer}
@@ -336,11 +336,11 @@ function applyFlow(f) {
     if (f.amount) D.payments.push(newPay(f, 'Hold amount · plot ' + f.plot, f.amount, f.mode, [f.plot], c.id));
   } else if (f.type === 'book') {
     const b = D.bookings.find(x => x.id === f.bid); if (!b) return;
-    Object.assign(b, {outcome: 'Converted', finalAmount: f.final, bookingAmount: f.amount || null, bookingDate: f.date, bookingMode: f.mode, loan: f.loan, loanAmount: f.loanAmount || null, emi: f.emi || null});
+    Object.assign(b, {outcome: 'Booked', finalAmount: f.final, bookingAmount: f.amount || null, bookingDate: f.date, bookingMode: f.mode, loan: f.loan, loanAmount: f.loanAmount || null, emi: f.emi || null});
     if (P[b.plot]) P[b.plot].status = 'SOLD OUT';
     D.plotOwners[b.plot] = f.cid;
     const c = D.clients.find(x => x.id === f.cid); if (c && !c.docStatus) c.docStatus = 'MOU not done';
-    const v = D.visits.find(x => x.id === f.vid); if (v) v.status = 'Converted';
+    const v = D.visits.find(x => x.id === f.vid); if (v) v.status = 'Booked';
     if (f.amount) D.payments.push(newPay(f, 'Booking amount · plot ' + b.plot, f.amount, f.mode, [b.plot], f.cid));
   } else if (f.type === 'pay') {
     const np = newPay(f, f.text || 'Payment' + (f.plot ? ' · plot ' + f.plot : ''), f.amount, f.mode, f.plot ? [f.plot] : [], f.cid);
@@ -370,11 +370,11 @@ store.edits.forEach(e => { if (!e.undone && !e.undoOf) editedSet.add(e.coll + '|
 const bookingById = IDX.bookings, clientById = IDX.clients;
 const plotOwner = {}, plotBk = {}; // filled by rebuildDerived(): who owns each plot and which booking decides its status
 const landByPlot = () => Object.fromEntries(D.landowners.filter(l => l.plot).map(l => [l.plot, l]));
-// Status of a site visit. When the visit is linked to a client folder, the folder decides it (Converted / Hold / Lapsed),
+// Status of a site visit. When the visit is linked to a client folder, the folder decides it (Booked / Hold / Lapsed),
 // so the Site visits list and the Clients list always agree. Otherwise it is the status set on the visit itself.
 // One exception: a lapsed client's visit can be put back on Follow up (v.reopened), so it returns to the Follow up tab.
 // "Not interested" (the old sheet value NOT INTERESTED) is shown as Lapsed.
-const VISIT_STATUSES = ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Hold', 'Converted', 'Lapsed', 'No status'];
+const VISIT_STATUSES = ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Hold', 'Booked', 'Lapsed', 'No status'];
 const clientLapsed = c => !!c && clientStatus(c)[0] === 'Lapsed';
 // Site visits: the Follow up tab and the Lapsed tab each have their own Sr. series (1, 2, 3 … oldest first),
 // worked out from the current statuses, so a visit gets a new number when it moves to the other tab.
@@ -410,18 +410,20 @@ const fuFromRemark = v => { const m = String(v.remark || '').match(/FU([1-4])/g)
 function vStatus(v) {
   const c = v.client && clientById[v.client];
   const s = (v.status || '').toUpperCase();
-  if (c && !(clientLapsed(c) && v.reopened && s.includes('FOLLOW'))) { const cs = clientStatus(c)[0]; return cs === 'On hold' ? ['Hold', 'b-hold'] : cs === 'Lapsed' ? ['Lapsed', 'b-lapsed'] : ['Converted', 'b-sold']; }
+  if (c && !(clientLapsed(c) && v.reopened && s.includes('FOLLOW'))) { const cs = clientStatus(c)[0]; return cs === 'On hold' ? ['Hold', 'b-hold'] : cs === 'Lapsed' ? ['Lapsed', 'b-lapsed'] : ['Booked', 'b-sold']; }
   if (s.includes('NOT') || s.includes('LAPS')) return ['Lapsed', 'b-lapsed'];
-  if (s === 'DONE' || s.includes('CONVERT')) return ['Converted', 'b-sold'];
+  if (s === 'DONE' || s === 'BOOKED' || s.includes('CONVERT')) return ['Booked', 'b-sold'];
   if (s.includes('HOLD')) return ['Hold', 'b-hold'];
   if (s.includes('FOLLOW')) { const n = (s.match(/[1-4]/) || [])[0] || fuFromRemark(v); return ['Follow up ' + n, 'b-dev']; }
   return ['No status', 'b-none'];
 }
-const isConvertedVisit = v => vStatus(v)[0] === 'Converted';
-const isConvertedBooking = b => /convert/i.test(b.outcome || '');
+const isConvertedVisit = v => vStatus(v)[0] === 'Booked';
+// "Booked" was renamed "Booked" (Nov 2026); old saved values may still say Booked.
+const isConvertedBooking = b => /convert|^booked$/i.test(b.outcome || '');
+const outcomeLabel = b => isConvertedBooking(b) ? 'Booked' : b.outcome || null;
 function clientStatus(c) {
   const outs = c.bookings.map(id => (bookingById[id].outcome || '').toLowerCase());
-  if (outs.some(o => o.startsWith('convert'))) return ['Booked', 'b-sold'];
+  if (outs.some(o => o.startsWith('convert') || o === 'booked')) return ['Booked', 'b-sold'];
   if (outs.some(o => o.includes('hold'))) return ['On hold', 'b-hold'];
   if (outs.length) return ['Lapsed', 'b-lapsed'];
   return ['Sold · registers only', 'b-none'];
@@ -441,7 +443,7 @@ const clientPlots = c => { const own = c.plots.filter(p => D.plots[p] && plotOwn
   const held = c.bookings.map(id => bookingById[id]).filter(b => b && /hold/i.test(b.outcome || '') && D.plots[b.plot] && !own.includes(b.plot)).map(b => b.plot);
   const r = [...new Set([...own, ...held])]; return r.length ? r : c.plots.filter(p => D.plots[p]); };
 const clientSize = c => { const a = clientPlots(c).map(p => D.plots[p].area).filter(x => x != null); return a.length ? Math.round(a.reduce((s, x) => s + x, 0) * 100) / 100 : null; };
-const clientFinal = c => { const conv = c.bookings.map(id => bookingById[id]).filter(b => /convert/i.test(b.outcome || '') && b.finalAmount);
+const clientFinal = c => { const conv = c.bookings.map(id => bookingById[id]).filter(b => isConvertedBooking(b) && b.finalAmount);
   if (conv.length) return conv.reduce((s, b) => s + b.finalAmount, 0);
   const deeds = clientPlots(c).map(p => D.dastavej[p]).filter(d => d && d.finalAmount); return deeds.length ? deeds.reduce((s, d) => s + d.finalAmount, 0) : null; };
 const lastHoldBooking = c => c.bookings.map(id => bookingById[id]).filter(b => b.holdDate || b.holdAmount).sort((a, b) => String(a.holdDate || '').localeCompare(String(b.holdDate || ''))).pop() || null;
@@ -473,10 +475,10 @@ function plotClass(p) {
 const fuStage = v => { for (let i = 4; i >= 1; i--) if (v['fu' + i + 'Date'] || v['fu' + i + 'Note']) return i; return 0; };
 const AGENTS = [...new Set([...D.visits, ...D.bookings].flatMap(x => agentsOf(x.by)))].filter(a => a !== 'Company').sort();
 const OPTS = {
-  visitStatus: ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Converted', 'Lapsed'],
+  visitStatus: ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Booked', 'Lapsed'],
   agents: [...AGENTS, 'Company'],
   incAgents: AGENTS.filter(a => !/pratik/i.test(a)),
-  outcome: ['Plot On Hold', 'Converted', 'Lapsed'],
+  outcome: ['Plot On Hold', 'Booked', 'Lapsed'],
   plotStatus: ['UNSOLD', 'HOLD', 'SOLD OUT', 'DEVELOPMENT AREA'],
   forWhat: ['Plots', 'Villas', 'Plots, Villas'],
   method: ['Cash', 'Online', 'Cheque', 'Plot'],
@@ -492,11 +494,11 @@ const OPTS = {
 const ROLE = () => ME.role;
 function lockReason(coll, o, f) {
   if (coll === 'bookings' && (f === 'refundAmount' || f === 'refundMode') && !isRefunded(o)) return 'Turn Refund on first (only for a lapsed hold).';
-  if (coll === 'plots' && f === 'status' && plotBk[o.no] && (plotBk[o.no].conv || plotBk[o.no].hold)) return 'This plot has a ' + (plotBk[o.no].conv ? 'Converted booking' : 'hold') + ', so its status follows the booking. Change the booking instead.';
-  if (coll === 'visits' && f === 'status' && o.client && clientById[o.client] && !clientLapsed(clientById[o.client])) return 'This visit is linked to a client folder, so its status follows the folder (Hold or Converted). Change it from the client folder.';
+  if (coll === 'plots' && f === 'status' && plotBk[o.no] && (plotBk[o.no].conv || plotBk[o.no].hold)) return 'This plot has a ' + (plotBk[o.no].conv ? 'booking' : 'hold') + ', so its status follows the booking. Change the booking instead.';
+  if (coll === 'visits' && f === 'status' && o.client && clientById[o.client] && !clientLapsed(clientById[o.client])) return 'This visit is linked to a client folder, so its status follows the folder (Hold or Booked). Change it from the client folder.';
   if (ROLE() !== 'Agent') return null;
-  if (coll === 'visits' && f === 'status' && isConvertedVisit(o)) return 'This visit is Converted. Only Admin or Super admin can change it.';
-  if (coll === 'bookings' && f === 'outcome' && isConvertedBooking(o)) return 'This booking is Converted. Only Admin or Super admin can change it.';
+  if (coll === 'visits' && f === 'status' && isConvertedVisit(o)) return 'This visit is Booked. Only Admin or Super admin can change it.';
+  if (coll === 'bookings' && f === 'outcome' && isConvertedBooking(o)) return 'This plot is Booked. Only Admin or Super admin can change the booking status.';
   return null;
 }
 function ed(coll, o, f, kind = 'text', opt = '', shown) {
@@ -577,9 +579,10 @@ document.addEventListener('click', e => {
       return {coll, id, f, kind: 'agents', o, nm, html: `<label style="grid-column:1/-1">${esc(label)} <span class="muted">(choose one or more)</span>${agentChips(cur, nm)}</label>`, lock: false};
     }
     if (kind === 'select') {
-      let opts = [...OPTS[opt]]; if (cur && !opts.includes(cur) && !(opt === 'visitStatus')) opts.unshift(cur);
-      if (opt === 'visitStatus' && o.client && clientById[o.client]) opts = opts.filter(x => x !== 'Converted');
-      const curLabel = opt === 'visitStatus' ? vStatus(o)[0] : cur;
+      const shownCur = opt === 'outcome' ? outcomeLabel(o) : cur; // an old saved "Converted" shows as Booked
+      let opts = [...OPTS[opt]]; if (shownCur && !opts.includes(shownCur) && !(opt === 'visitStatus')) opts.unshift(shownCur);
+      if (opt === 'visitStatus' && o.client && clientById[o.client]) opts = opts.filter(x => x !== 'Booked');
+      const curLabel = opt === 'visitStatus' ? vStatus(o)[0] : shownCur;
       input = `<select id="${nm}"${dis}><option value="">—</option>${opts.map(x => `<option ${x === curLabel ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
     } else if (kind === 'date' && (!cur || isISO(cur))) input = `<input id="${nm}" type="date" value="${esc(cur || '')}"${dis}>`;
     else if (kind === 'money' || kind === 'number') input = `<input id="${nm}" type="number" step="any" value="${cur ?? ''}"${dis}>`;
@@ -800,7 +803,7 @@ const openAddVisit = () => {
   <div class="sec">Visit</div>
   <label>Visit date *<input type="date" id="nv_date" value="${today}" style="max-width:220px"></label>
   <label>Agent * <span class="muted">(choose one or more)</span>${agentChips('')}</label>
-  <label>Status${chips('deal', ['Follow up', ...(ROLE() !== 'Agent' ? ['Converted'] : []), 'Lapsed', 'Hold', 'Book'], 'Follow up')}</label>
+  <label>Status${chips('deal', ['Follow up', ...(ROLE() !== 'Agent' ? ['Booked'] : []), 'Lapsed', 'Hold', 'Book'], 'Follow up')}</label>
   <div id="nv_deal" style="display:none;gap:12px">
     <label>Plot * <span class="muted">(unsold plots only)</span><select id="nv_plot"><option value="">Choose a plot</option>${freePlots().map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
     <div class="g2" id="nv_holdf"><label>Hold amount<input id="nv_hamt" type="number" value="1100"></label><label>Hold paid by${modeSel('nv_hmode', 'Cash')}</label></div>
@@ -863,7 +866,7 @@ function flowDlg(ds) {
     <div class="g2"><label>Booking amount<input id="fb_amt" type="number" placeholder="Amount received now"></label><label>Date *<input id="fb_date" type="date" value="${today()}"></label></div>
     <div class="g2"><label>Paid by${modeSel('fb_mode', 'Cheque')}</label><label>Loan<select id="fb_loan"><option>Not Availed</option><option>Loan Availed</option></select></label></div>
     <div class="g2"><label>Loan amount<input id="fb_lamt" type="number"></label><label>EMI<input id="fb_emi" type="number"></label></div>
-    <div class="note" style="margin:0">Saving marks the plot Sold, the booking Converted${vlist.length ? ' and the site visit Converted' : ''}. The document status starts as "MOU not done".</div>`, 'Book plot', () => {
+    <div class="note" style="margin:0">Saving marks the plot Sold and the booking Booked${vlist.length ? ', and the site visit Booked' : ''}. The document status starts as "MOU not done".</div>`, 'Book plot', () => {
       const final = num('#fb_final'); if (!final) return err('Enter the final amount.'); if (!$('#fb_date').value) return err('Enter the date.');
       const s = stamp();
       const f = {type: 'book', at: new Date().toISOString(), role: ROLE(), bid: b.id, cid: c.id, vid: vlist[0] ? vlist[0].id : null, final, amount: num('#fb_amt'), date: $('#fb_date').value, mode: $('#fb_mode').value,
@@ -959,7 +962,7 @@ V.client = id => {
   const multi = plots.length > 1; let sel = clientSel[id]; if (!sel || (sel !== 'all' && !plots.includes(sel))) sel = multi ? plots[0] : 'all';
   const mine = new Set(plots);
   const plotPaid = pn => pays.filter(received).reduce((a, p) => { const own = (p.plots || []).filter(x => mine.has(x)); return own.includes(pn) ? a + (p.amount || 0) / own.length : a; }, 0);
-  // a lapsed hold has no price to pay any more, so only a Converted booking or an active hold gives the final amount
+  // a lapsed hold has no price to pay any more, so only a Booked plot or an active hold gives the final amount
   const finalBk = pn => bks.find(x => x.plot === pn && isConvertedBooking(x)) || bks.find(x => x.plot === pn && /hold/i.test(x.outcome || ''));
   const finalOf = pn => { const b = finalBk(pn);
     return b && b.finalAmount != null ? b.finalAmount : owned.includes(pn) && D.dastavej[pn] ? D.dastavej[pn].finalAmount ?? null : null; };
@@ -988,10 +991,10 @@ V.client = id => {
     const hb = b ? `<div class="psub">Hold and booking</div>${kv3([
         ['Hold date', ed('bookings', b, 'holdDate', 'date')], ['Hold amount', ed('bookings', b, 'holdAmount', 'money')], ['Hold mode', ed('bookings', b, 'holdMode', 'select', 'payMode')],
         ['Refund', refund(b)], ['Refund amount', rf(b, 'refundAmount', 'money')], ['Refund mode', rf(b, 'refundMode', 'select', 'payMode')],
-        ['Booking date', ed('bookings', b, 'bookingDate', 'date')], ['Booking amount', ed('bookings', b, 'bookingAmount', 'money')], ['Booking mode', ed('bookings', b, 'bookingMode', 'select', 'payMode')]])}
-      ${kv3([...dpCells(b), ['Loan', ed('bookings', b, 'loan', 'select', 'loan')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')]])}` : '';
+        ['Booking date', ed('bookings', b, 'bookingDate', 'date')], ['Booking amount', ed('bookings', b, 'bookingAmount', 'money')], ['Booking mode', ed('bookings', b, 'bookingMode', 'select', 'payMode')],
+        ...dpCells(b), ['Loan', ed('bookings', b, 'loan', 'select', 'loan')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')]])}` : ''; // one block, so its one pencil edits every row
     const mou = b || d ? `<div class="psub">MOU and dastavej</div>${kv3([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}` : '';
-    return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : hold ? 'b-hold' : 'b-lapsed'}">${val(b.outcome)}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
+    return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : hold ? 'b-hold' : 'b-lapsed'}">${val(outcomeLabel(b))}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
     ${hold ? `<div class="acts"><span>This plot is on hold since ${fd(b.holdDate)}.</span><button class="btn primary small" data-flow="book" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Booked</button><button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Lapsed</button></div>` : ''}
     <div class="pcols"><div>${hb}</div><div>${mou}</div></div>
     ${r ? `<div class="psub">Registry and maintenance</div>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance deposit', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')], ['Maintenance cheque', b ? ed('bookings', b, 'maintenanceCheque') : '—']])}` : ''}
@@ -1033,7 +1036,7 @@ V.plots = () => {
     {k: 'status', label: 'Status', get: p => plotClass(p)[1], cell: p => ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${plotClass(p)[2]}">${plotClass(p)[1]}</span>`)},
     {k: 'area', label: 'Area (sq yd)', type: 'num', get: p => p.area, cell: p => ed('plots', p, 'area', 'number')},
     {k: 'client', label: 'Client', get: p => plotOwner[p.no] ? clientById[plotOwner[p.no]].name : null},
-    {k: 'booking', label: 'Booking list', get: p => conv.has(p.no) ? 'Converted' : D.bookings.some(b => b.plot === p.no && /hold/i.test(b.outcome || '')) ? 'On hold' : D.bookings.some(b => b.plot === p.no) ? 'Lapsed only' : null},
+    {k: 'booking', label: 'Booking list', get: p => conv.has(p.no) ? 'Booked' : D.bookings.some(b => b.plot === p.no && /hold/i.test(b.outcome || '')) ? 'On hold' : D.bookings.some(b => b.plot === p.no) ? 'Lapsed only' : null},
     {k: 'note', label: 'Note', get: p => p.note, cell: p => ed('plots', p, 'note')}
   ];
   const every = Object.values(D.plots); const isPre = p => p.trpl === 'Before TRPL'; const nPre = every.filter(isPre).length;
@@ -1054,7 +1057,7 @@ V.plot = no => {
   <div class="split"><div>
   ${D.plots[no] ? `<div class="card"><h2>Plot <span class="src">Plot List sheet</span></h2>${kv([['Status', ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${pc[2]}">${pc[1]}</span>`)], ['Area (sq yd)', ed('plots', p, 'area', 'number')], ['Note', ed('plots', p, 'note')]])}</div>` : ''}
   ${owner ? `<div class="card"><h2>Client</h2><a class="folder" data-go="#/client/${owner.id}">${ico('users')}<div><b>${esc(owner.name)}</b><span>${esc(owner.phone || '')} · open client folder</span></div></a></div>` : ''}
-  <div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Holds and bookings <span class="src">Booking list</span></h2>${bks.length ? `<table><thead><tr><th class="sr">Sr.</th><th>Client</th><th>Hold date</th><th>Outcome</th><th class="num">Finalised</th><th class="num">Down payment</th></tr></thead><tbody>${bks.map(b => `<tr class="click" data-go="#/client/${D.clients.find(c => c.bookings.includes(b.id)).id}"><td class="sr">${b.sr}</td><td>${val(b.client)}</td><td>${ed('bookings', b, 'holdDate', 'date')}</td><td>${ed('bookings', b, 'outcome', 'select', 'outcome')}</td><td class="num">${ed('bookings', b, 'finalAmount', 'money')}</td><td class="num">${ed('bookings', b, 'dpAmount', 'money')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="padding:0 10px">None.</p>'}</div>
+  <div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Holds and bookings <span class="src">Booking list</span></h2>${bks.length ? `<table><thead><tr><th class="sr">Sr.</th><th>Client</th><th>Hold date</th><th>Outcome</th><th class="num">Finalised</th><th class="num">Down payment</th></tr></thead><tbody>${bks.map(b => `<tr class="click" data-go="#/client/${D.clients.find(c => c.bookings.includes(b.id)).id}"><td class="sr">${b.sr}</td><td>${val(b.client)}</td><td>${ed('bookings', b, 'holdDate', 'date')}</td><td>${ed('bookings', b, 'outcome', 'select', 'outcome', val(outcomeLabel(b)))}</td><td class="num">${ed('bookings', b, 'finalAmount', 'money')}</td><td class="num">${ed('bookings', b, 'dpAmount', 'money')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="padding:0 10px">None.</p>'}</div>
   ${d ? `<div class="card"><h2>Dastavej <span class="src">Dastavej sheet</span></h2>${kv([['Name on dastavej', ed('dastavej', d, 'client')], ['Date', ed('dastavej', d, 'date', 'date')], ['Financial year', ed('dastavej', d, 'fy')], ['Finalised amount', ed('dastavej', d, 'finalAmount', 'money')], ['Status', ed('dastavej', d, 'status')], ['Type', ed('dastavej', d, 'kind')]])}</div>` : ''}
   ${r ? `<div class="card"><h2>Registry & maintenance <span class="src">Registry sheet</span></h2>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')]])}</div>` : ''}
   ${l ? `<div class="card"><h2>Sold plot register <span class="src">Sr. ${l.sr}</span></h2>${kv([['Owner', ed('landowners', l, 'owner')], ['Sq yard', ed('landowners', l, 'sqYard', 'number')], ['Total sale value', ed('landowners', l, 'saleValue', 'money')], ['Anjanee paid', ed('landowners', l, 'anjaneePaid', 'money')]])}</div>` : ''}
@@ -1271,7 +1274,7 @@ function exportAll() {
     const raw = (name, rows, cols) => sheets.push(tableSheet({cols, rows, useAll: true}, name));
     raw('Bookings', [...D.bookings].sort((a, b) => (a.sr || 0) - (b.sr || 0)), [
       {label: 'Sr.', type: 'num', get: b => b.sr}, {label: 'Client', get: b => b.client}, {label: 'Phone', get: b => b.phone}, {label: 'Plot', get: b => b.plot}, {label: 'Agent', get: b => b.by},
-      {label: 'Hold date', type: 'date', get: b => b.holdDate}, {label: 'Hold amount', type: 'money', get: b => b.holdAmount}, {label: 'Status', get: b => b.outcome},
+      {label: 'Hold date', type: 'date', get: b => b.holdDate}, {label: 'Hold amount', type: 'money', get: b => b.holdAmount}, {label: 'Status', get: outcomeLabel},
       {label: 'Hold mode', get: b => b.holdMode}, {label: 'Refund amount', type: 'money', get: b => b.refundAmount}, {label: 'Refund mode', get: b => b.refundMode},
       {label: 'Booking date', type: 'date', get: b => b.bookingDate}, {label: 'Booking amount', type: 'money', get: b => b.bookingAmount}, {label: 'Booking mode', get: b => b.bookingMode},
       {label: 'Final amount', type: 'money', get: b => b.finalAmount}, {label: 'DP total', type: 'money', get: dpTotal}, {label: 'DP payments', type: 'num', get: b => dpEntries(b).length || null}, {label: 'Last DP date', type: 'date', get: b => (dpEntries(b).slice(-1)[0] || {}).date || null},
@@ -1378,7 +1381,7 @@ V.users = () => {
     {k: 'act', label: '', nofilter: true, get: () => null, cell: u => (u.role === 'Super admin' && ME.role !== 'Super admin') ? '' : `<button class="btn small" data-uedit="${u.id}">Edit</button>`}
   ], USERS, {noun: 'users'});
   return crumbs([['Admin'], ['Users']]) + `<div class="row" style="justify-content:space-between"><h1>Users</h1><button class="btn primary" data-uadd>+ Add user</button></div>
-  <p class="sub">Agents can work on everything except changing a Converted visit or booking. Admins can also manage users. Only a Super admin can add or change another Super admin.</p>${t.html}`;
+  <p class="sub">Agents can work on everything except changing a Booked visit or booking. Admins can also manage users. Only a Super admin can add or change another Super admin.</p>${t.html}`;
 };
 function userDlg(u) {
   const roles = ME.role === 'Super admin' ? ['Agent', 'Admin', 'Super admin'] : ['Agent', 'Admin'];
@@ -1413,7 +1416,7 @@ V.check = () => {
   const S = D.summary; const un = D.payments.filter(p => !p.clients.length);
   return crumbs([['Admin'], ['Data check']]) + `<h1>Data check</h1><p class="sub">How well your sheets loaded and linked together.</p>
   <div class="stats">${[['Site visits', D.visits.length], ['Plots', Object.keys(D.plots).length], ['Client folders', D.clients.length], ['Booking rows', D.bookings.length], ['Payments', D.payments.length], ['Payments linked', D.payments.length - un.length], ['Site expenses', D.expenses.length]].map(([k, v]) => `<div class="stat"><small>${k}</small><div>${v}</div></div>`).join('')}</div>
-  <div class="card"><h2>Fixed while loading</h2><ul style="margin:0;padding-left:18px;color:var(--ink2)"><li>Dates that Excel had read with day and month swapped were corrected.</li><li>Phone numbers stored as numbers were turned back into 10-digit numbers.</li><li>Agent names written in different ways were merged (for example LAKSHIT, Lakhshit and Lakshit).</li><li>"Done" in the visit list is shown as "Converted".</li></ul></div>
+  <div class="card"><h2>Fixed while loading</h2><ul style="margin:0;padding-left:18px;color:var(--ink2)"><li>Dates that Excel had read with day and month swapped were corrected.</li><li>Phone numbers stored as numbers were turned back into 10-digit numbers.</li><li>Agent names written in different ways were merged (for example LAKSHIT, Lakhshit and Lakshit).</li><li>"Done" in the visit list is shown as "Booked".</li></ul></div>
   <h2 style="font-size:15px;margin:0 0 8px">${un.length} payments not linked to a client</h2>
   ${tbl('unlinked', [{k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date}, {k: 'text', label: 'Entry in sheet', get: p => p.text}, {k: 'amt', label: 'Amount', type: 'money', get: p => p.amount}], un, {totals: ['amt'], totalIf: received, noun: 'payments'}).html}
   ${problems()}
@@ -1425,10 +1428,10 @@ function problems() {
   const cl = c => go('#/client/' + c.id, c.name);
   const P = Object.values(D.plots);
   const items = [
-    ['Plots marked Sold with no Converted booking', P.filter(p => /SOLD/i.test(p.status || '') && !/UNSOLD/i.test(p.status || '') && !(plotBk[p.no] || {}).conv && !isPrePlot(p) && !landByPlot()[p.no]).map(p => go('#/plot/' + encodeURIComponent(p.no), 'Plot ' + p.no + (p.note ? ' (' + p.note + ')' : ''))),
-      'The Plot List says Sold, but every booking on it is Lapsed. Either the buyer\'s booking should be Converted, or the plot should be Unsold.'],
-    ['Plots marked Hold in the Plot List but with a Converted booking', P.filter(p => /HOLD/i.test(p.status || '') && (plotBk[p.no] || {}).conv).map(p => go('#/plot/' + encodeURIComponent(p.no), 'Plot ' + p.no + ' → ' + plotBk[p.no].conv.client)),
-      'Now shown as Sold everywhere, because the booking is Converted.'],
+    ['Plots marked Sold but not Booked', P.filter(p => /SOLD/i.test(p.status || '') && !/UNSOLD/i.test(p.status || '') && !(plotBk[p.no] || {}).conv && !isPrePlot(p) && !landByPlot()[p.no]).map(p => go('#/plot/' + encodeURIComponent(p.no), 'Plot ' + p.no + (p.note ? ' (' + p.note + ')' : ''))),
+      'The Plot List says Sold, but every booking on it is Lapsed. Either the buyer\'s booking should be Booked, or the plot should be Unsold.'],
+    ['Plots marked Hold in the Plot List but already Booked', P.filter(p => /HOLD/i.test(p.status || '') && (plotBk[p.no] || {}).conv).map(p => go('#/plot/' + encodeURIComponent(p.no), 'Plot ' + p.no + ' → ' + plotBk[p.no].conv.client)),
+      'Now shown as Sold everywhere, because the plot is Booked.'],
     ['Holds with no plot number', D.bookings.filter(b => !b.plot && /hold/i.test(b.outcome || '')).map(b => { const c = D.clients.find(x => x.bookings.includes(b.id)); return c ? cl(c) : esc(b.client || ''); }),
       'Add the plot number on the booking (client folder → pencil), or mark the hold Lapsed.'],
     ['Booked clients with no final amount', D.clients.filter(c => clientStatus(c)[0] === 'Booked' && !clientFinal(c)).map(cl), 'Remaining balance can\'t be worked out until the final amount is filled in.'],
@@ -1515,7 +1518,7 @@ document.addEventListener('change', e => {
 }));
 function undo(i) {
   const e = store.edits[i]; if (!e || e.undone) return; const o = IDX[e.coll][e.id];
-  if (e.coll === 'visits' && e.field === 'status' && ROLE() === 'Agent' && (e.old === 'Converted' || /done|convert/i.test(e.old || '') || /convert/i.test(e.new || ''))) { toast('Only Admin or Super admin can undo a Converted change.'); return; }
+  if (e.coll === 'visits' && e.field === 'status' && ROLE() === 'Agent' && (/^(done|booked)$|convert/i.test(e.old || '') || /^booked$|convert/i.test(e.new || ''))) { toast('Only Admin or Super admin can undo a change to a Booked visit.'); return; }
   if (!o) { toast('This record no longer exists.'); return; }
   const ops = [{op: 'patch', coll: e.coll, id: e.id, field: e.field, value: e.old, label: e.label + ' (undo)', undoOf: e.eid}];
   sendOps(ops).then(() => { setF(e.coll, o, e.field, e.old); e.undone = true; editedSet.delete(e.coll + '|' + e.id + '|' + e.field); render(); toast('Change undone'); }).catch(err => toast(err.message));
@@ -1530,7 +1533,7 @@ function saveNew(kind) {
     const agents = chipVals('agents'); if (!agents.length) return err('Choose at least one agent.');
     const pick = ($('#dlg .chips[data-group=deal] .chip.on') || {dataset: {}}).dataset.chip || 'Follow up';
     const deal = pick === 'Hold' ? 'hold' : pick === 'Book' ? 'book' : 'none';
-    const status = pick === 'Hold' ? 'Follow up 1' : pick === 'Book' ? 'Converted' : pick === 'Follow up' ? 'Follow up 1' : pick;
+    const status = pick === 'Hold' ? 'Follow up 1' : pick === 'Book' ? 'Booked' : pick === 'Follow up' ? 'Follow up 1' : pick;
     const v = {id: 'N' + Date.now(), added: true, row: 0, date: $('#nv_date').value, name, phone: phone || null, by: agents.join(', '), status, remark: $('#nv_remark').value.trim() || null, client: null, source: 'Added in CRM', sr: maxSr(D.visits) + 1};
     const plot = $('#nv_plot').value; const nn = idn => $(idn).value === '' ? null : Number($(idn).value);
     if (deal !== 'none' && !plot) return err('Choose the plot.');

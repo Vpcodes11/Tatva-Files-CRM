@@ -54,7 +54,7 @@ with sync_playwright() as p:
     ok(q(f"lockReason('visits', IDX.visits['{lv}'], 'status')") is None, 'status of a lapsed client’s visit can be changed (not locked)')
     go(f'#/visit/{lv}'); a.click('.card h2 .pen'); a.wait_for_timeout(200)
     opts = q("[...document.querySelectorAll('.dlg select option')].map(o => o.textContent)"); a.click('[data-dlgclose]')
-    ok('Converted' not in opts and 'Follow up 1' in opts and 'Lapsed' in opts, 'its choices are Follow up 1–4 and Lapsed: %s' % opts)
+    ok('Booked' not in opts and 'Follow up 1' in opts and 'Lapsed' in opts, 'its choices are Follow up 1–4 and Lapsed: %s' % opts)
     set_status(lv, 'Follow up 1'); reload(); tab(False)
     ok(q(f"vStatus(IDX.visits['{lv}'])[0]") == 'Follow up 1' and in_tab(lv, 'visits') and q(f"IDX.visits['{lv}'].reopened") is True, 'lapsed client’s visit set to Follow up 1 → in Follow up (saved)')
     ok(q(f"clientStatus(clientById['{cid}'])[0]") == 'Lapsed', '… the client folder itself stays Lapsed (its hold did lapse)')
@@ -63,13 +63,13 @@ with sync_playwright() as p:
 
     # server rules
     post = lambda pg, ops: pg.evaluate(E, "fetch('/api/ops',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({ops:%s})}).then(r=>r.status)" % ops)
-    ok(post(a, f"[{{op:'patch',coll:'visits',id:'{lv}',field:'status',value:'Converted'}}]") == 403, 'server refuses Converted on a lapsed client’s visit')
+    ok(post(a, f"[{{op:'patch',coll:'visits',id:'{lv}',field:'status',value:'Booked'}}]") == 403, 'server refuses Booked on a lapsed client’s visit')
     bv = q("D.visits.find(v => v.client && clientStatus(clientById[v.client])[0] === 'Booked').id")
     ok(post(a, f"[{{op:'patch',coll:'visits',id:'{bv}',field:'status',value:'Follow up 1'}}]") == 403, 'server still refuses status changes on a booked client’s visit')
     ok(q("fetch('/api/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Lapse Agent',username:'lapseagent',role:'Agent',password:'pass1234'})}).then(r=>r.status)") in (200, 201), 'added an Agent for the next check')
     g = b.new_context(viewport={'width': 1300, 'height': 900}).new_page(); g.on('pageerror', lambda x: errs.append(str(x))); login(g, 'lapseagent', 'pass1234')
-    dv = g.evaluate(E, "(D.visits.find(v => v.client && clientLapsed(clientById[v.client]) && /DONE|CONVERT/i.test(v.status || '')) || {}).id")
-    ok(dv and post(g, f"[{{op:'patch',coll:'visits',id:'{dv}',field:'status',value:'Follow up 3'}}]") == 200, 'Agent can move a lapsed client’s visit (sheet status DONE) back to Follow up')
+    dv = g.evaluate(E, "(D.visits.find(v => v.client && clientLapsed(clientById[v.client]) && /^Booked$|DONE|CONVERT/i.test(v.status || '')) || {}).id")
+    ok(dv and post(g, f"[{{op:'patch',coll:'visits',id:'{dv}',field:'status',value:'Follow up 3'}}]") == 200, 'Agent can move a lapsed client’s visit (sheet status DONE, now Booked) back to Follow up')
     g.reload(); g.wait_for_selector('#nav a'); ok(g.evaluate(E, f"vStatus(IDX.visits['{dv}'])[0]") == 'Follow up 3', '… and it shows Follow up 3')
 
     # a new hold ends the follow-up; when that hold lapses the visit is Lapsed again
