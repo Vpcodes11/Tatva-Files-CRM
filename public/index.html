@@ -464,6 +464,32 @@ function dpEntries(b) {
   return own.concat(D.payments.filter(p => p.dpOf === b.id).map(p => ({date: p.date, amount: p.amount, mode: p.mode, note: p.note, returned: !received(p), pid: p.id}))
     .sort((x, y) => String(x.date || '').localeCompare(String(y.date || ''))));
 }
+// ---------- Paid till now: ONE rule, used by every folder, list, form and check ----------
+// = every received payment + the DP typed on a (not lapsed) booking, for the part the client's other payments don't
+// already cover. ("Other payments" = not the hold / booking amount entries and not "+ Add DP" payments; old sheet bank
+// lines often already contain the DP, so it must not be counted twice.) A payment for several plots is split equally.
+function payShare(p, pn, mine, spreadUnassigned) {
+  const own = (p.plots || []).filter(x => mine.has(x));
+  if (own.length) return own.includes(pn) ? (p.amount || 0) / own.length : 0;
+  return spreadUnassigned && mine.size ? (p.amount || 0) / mine.size : 0;
+}
+function typedDpExtra(c, b) {
+  if (!b || !b.dpAmount || isLapsedBooking(b)) return 0;
+  const mine = new Set(clientPlots(c)); if (b.plot) mine.add(b.plot);
+  const other = clientPayments(c.id).filter(p => received(p) && !p.dpOf && !/^(hold|booking) amount/i.test(p.text || ''));
+  const covered = b.plot ? other.reduce((a, p) => a + payShare(p, b.plot, mine, true), 0) : paidOf(other);
+  return Math.max(0, Math.round(b.dpAmount - covered));
+}
+function clientPaid(c, pn) {
+  const pays = clientPayments(c.id).filter(received); const mine = new Set(clientPlots(c));
+  const base = pn ? pays.reduce((a, p) => a + payShare(p, pn, mine, false), 0) : paidOf(pays);
+  const extra = c.bookings.map(id => bookingById[id]).filter(b => b && (!pn || b.plot === pn)).reduce((a, b) => a + typedDpExtra(c, b), 0);
+  return Math.round(base + extra);
+}
+// rows for the Payments table, so its total = Paid till now: the typed DP that no payment entry shows yet
+const typedDpRows = c => c.bookings.map(id => bookingById[id]).filter(Boolean).map(b => ({b, x: typedDpExtra(c, b)})).filter(r => r.x > 0)
+  .map(({b, x}) => ({id: 'typed-' + b.id, virtual: true, sr: null, date: b.dpDate || null, text: 'Down payment (DP) typed on the booking' + (b.plot ? ' · plot ' + b.plot : ''), mode: b.dpMode || null,
+    status: 'Received', note: x < b.dpAmount ? 'Part not covered by other payments (DP ' + inr(b.dpAmount) + ')' : 'Not entered as a payment yet', amount: x, plots: b.plot ? [b.plot] : []}));
 const dpTotal = b => { const e = dpEntries(b).filter(x => !x.returned && x.amount); return e.length ? e.reduce((a, x) => a + x.amount, 0) : null; };
 const amtCell = (p, html) => received(p) ? html : `<span style="text-decoration:line-through;color:var(--ink3)">${html}</span>`;
 const payBadge = p => received(p) ? '<span class="badge b-sold">Received</span>' : '<span class="badge b-lapsed">Cheque returned</span>';
@@ -877,7 +903,7 @@ function flowDlg(ds) {
   } else if (ds.flow === 'book') {
     const b = bookingById[ds.bid]; const c = clientById[ds.cid]; const pl = D.plots[b.plot];
     const vlist = D.visits.filter(x => x.client === c.id).sort((a, z) => String(z.date || '').localeCompare(String(a.date || '')));
-    const paidNow = Math.round(paidOf(clientPayments(c.id).filter(p => (p.plots || []).includes(b.plot)))); const area = pl && pl.area;
+    const paidNow = clientPaid(c, b.plot); const area = pl && pl.area;
     openDlg('Book plot ' + esc(b.plot), esc(c.name) + ' · on hold since ' + fd(b.holdDate) + (area ? ' · ' + area + ' sq yd' : ''), `
     <div class="sec2">Price</div>
     <div class="g2"><label>Final amount *<input id="fb_final" ${AMT_ATTR} placeholder="Agreed price, e.g. 1100000"></label>
@@ -908,7 +934,7 @@ function flowDlg(ds) {
       const final = num('#fb_final'), amount = num('#fb_amt') || 0, dp = num('#fb_dpamt') || 0;
       $('#fb_rate').value = final && area ? inr(Math.round(final / area)) : '';
       const cell = (k, v, red) => `<div><small>${k}</small><b${red ? ' style="color:var(--lapsed)"' : ''}>${v}</b></div>`;
-      $('#fb_sum').innerHTML = cell('Paid so far (hold)', inr(paidNow)) + cell('Paid now', inr(amount + dp)) + cell('Total after booking', inr(paidNow + amount + dp)) + cell('Balance', final ? inr(final - paidNow - amount - dp) : '—', final && final - paidNow - amount - dp < 0);
+      $('#fb_sum').innerHTML = cell('Paid so far', inr(paidNow)) + cell('Paid now', inr(amount + dp)) + cell('Total after booking', inr(paidNow + amount + dp)) + cell('Balance', final ? inr(final - paidNow - amount - dp) : '—', final && final - paidNow - amount - dp < 0);
     };
     const box = $('#dlg .dlg'); box.addEventListener('input', upd); box.addEventListener('change', upd); upd(); // on this form only, so it goes away with it
   } else if (ds.flow === 'dp') {
@@ -982,7 +1008,7 @@ V.clients = () => {
     {k: 'hold', label: 'Last hold date', type: 'date', get: c => (lastHoldBooking(c) || {}).holdDate},
     {k: 'holdAmt', label: 'Hold amount', type: 'money', nofilter: true, get: c => (lastHoldBooking(c) || {}).holdAmount},
     {k: 'final', label: 'Final amount', type: 'money', nofilter: true, totalIf: c => clientStatus(c)[0] === 'Booked', get: clientFinal},
-    {k: 'paid', label: 'Paid till now', type: 'money', nofilter: true, get: c => paidOf(clientPayments(c.id)) || null}
+    {k: 'paid', label: 'Paid till now', type: 'money', nofilter: true, get: c => clientPaid(c) || null}
   ];
   const grp = c => { const s = clientStatus(c)[0]; return s === 'On hold' || s === 'Lapsed' ? s : 'Booked'; };
   const G = ['Booked', 'On hold', 'Lapsed']; const n = Object.fromEntries(G.map(g => [g, D.clients.filter(c => grp(c) === g).length]));
@@ -995,11 +1021,11 @@ V.client = id => {
   const c = clientById[id]; if (!c) return '<p>Client not found.</p>';
   const s = clientStatus(c); const bks = c.bookings.map(x => bookingById[x]); const pays = clientPayments(c.id);
   const owned = c.plots.filter(p => plotOwner[p] === c.id); const plots = clientPlots(c);
-  const final = clientFinal(c), paid = paidOf(pays), ret = pays.filter(p => !received(p));
+  const final = clientFinal(c), paid = clientPaid(c), ret = pays.filter(p => !received(p));
   const b0 = bks[0] || {};
   const multi = plots.length > 1; let sel = clientSel[id]; if (!sel || (sel !== 'all' && !plots.includes(sel))) sel = multi ? plots[0] : 'all';
   const mine = new Set(plots);
-  const plotPaid = pn => pays.filter(received).reduce((a, p) => { const own = (p.plots || []).filter(x => mine.has(x)); return own.includes(pn) ? a + (p.amount || 0) / own.length : a; }, 0);
+  const plotPaid = pn => clientPaid(c, pn);
   // a lapsed hold has no price to pay any more, so only a Booked plot or an active hold gives the final amount
   const finalBk = pn => bks.find(x => x.plot === pn && isConvertedBooking(x)) || bks.find(x => x.plot === pn && /hold/i.test(x.outcome || ''));
   const finalOf = pn => { const b = finalBk(pn);
@@ -1011,7 +1037,8 @@ V.client = id => {
   const rem = H.final != null ? H.final - H.paid : null;
   const perYd = H.final != null && H.size ? Math.round(H.final / H.size) : null;
   const shownPlots = sel === 'all' ? plots : [sel];
-  const shownPays = sel === 'all' ? pays : pays.filter(p => (p.plots || []).includes(sel));
+  const allPays = pays.concat(typedDpRows(c)); // + the typed DP rows, so the table total = Paid till now
+  const shownPays = sel === 'all' ? allPays : allPays.filter(p => (p.plots || []).includes(sel));
   const plotCard = p => {
     const bp = bks.filter(x => x.plot === p); const b = bp.find(isConvertedBooking) || bp.find(x => /hold/i.test(x.outcome || '')) || bp[bp.length - 1]; const d = owned.includes(p) ? D.dastavej[p] : null; const r = owned.includes(p) ? D.registry[p] : null; const pl = D.plots[p];
     const hold = b && /hold/i.test(b.outcome || '');
@@ -1038,11 +1065,11 @@ V.client = id => {
     ${r ? `<div class="psub">Registry and maintenance</div>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance deposit', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')], ['Maintenance cheque', b ? ed('bookings', b, 'maintenanceCheque') : '—']])}` : ''}
     ${b && (b.remarks || b.paymentRemarks || b.dastavejRemarks) ? `<p class="muted" style="margin:12px 0 0">${esc([b.remarks, b.paymentRemarks, b.dastavejRemarks].filter(Boolean).join(' · '))}</p>` : ''}</div>`; };
   const payT = shownPays.length ? tbl('pay-' + c.id + '-' + sel, [
-      {k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date, cell: p => ed('payments', p, 'date', 'date')},
-      {k: 'text', label: 'Entry', get: p => p.text, cell: p => ed('payments', p, 'text')}, {k: 'mode', label: 'Mode', get: p => p.mode, cell: p => ed('payments', p, 'mode', 'select', 'payMode')},
-      {k: 'status', label: 'Status', get: p => p.status, cell: p => ed('payments', p, 'status', 'select', 'payStatus', payBadge(p))},
-      {k: 'note', label: 'Note', get: p => p.note, cell: p => ed('payments', p, 'note')},
-      {k: 'amount', label: 'Amount', type: 'money', get: p => p.amount, cell: p => amtCell(p, ed('payments', p, 'amount', 'money'))}], shownPays, {totals: ['amount'], totalIf: received, noun: 'payments'}).html : `<p class="muted">No payments linked to this ${sel !== 'all' ? 'plot' : 'client'}.</p>`;
+      {k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date, cell: p => p.virtual ? fd(p.date) : ed('payments', p, 'date', 'date')},
+      {k: 'text', label: 'Entry', get: p => p.text, cell: p => p.virtual ? `<i>${esc(p.text)}</i>` : ed('payments', p, 'text')}, {k: 'mode', label: 'Mode', get: p => p.mode, cell: p => p.virtual ? val(p.mode) : ed('payments', p, 'mode', 'select', 'payMode')},
+      {k: 'status', label: 'Status', get: p => p.status, cell: p => p.virtual ? '<span class="badge b-hold" title="Typed on the booking (DP row above), not a separate payment entry">From booking</span>' : ed('payments', p, 'status', 'select', 'payStatus', payBadge(p))},
+      {k: 'note', label: 'Note', get: p => p.note, cell: p => p.virtual ? `<span class="muted">${esc(p.note)}</span>` : ed('payments', p, 'note')},
+      {k: 'amount', label: 'Amount', type: 'money', get: p => p.amount, cell: p => p.virtual ? inr(p.amount) : amtCell(p, ed('payments', p, 'amount', 'money'))}], shownPays, {totals: ['amount'], totalIf: received, noun: 'payments'}).html : `<p class="muted">No payments linked to this ${sel !== 'all' ? 'plot' : 'client'}.</p>`;
   const vs = D.visits.filter(x => x.client === id); const vsr = visitSrs();
   return crumbs([['Files'], ['Clients', '#/clients'], [c.name]]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${ed('clients', c, 'name')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
   <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="clients|${esc(id)}|#/clients">Delete folder</button>` : ''}<button class="btn" data-flow="hold" data-cid="${esc(id)}">+ Hold another plot</button></div></div>
@@ -1473,9 +1500,9 @@ function problems() {
     ['Holds with no plot number', D.bookings.filter(b => !b.plot && /hold/i.test(b.outcome || '')).map(b => { const c = D.clients.find(x => x.bookings.includes(b.id)); return c ? cl(c) : esc(b.client || ''); }),
       'Add the plot number on the booking (client folder → pencil), or mark the hold Lapsed.'],
     ['Booked clients with no final amount', D.clients.filter(c => clientStatus(c)[0] === 'Booked' && !clientFinal(c)).map(cl), 'Remaining balance can\'t be worked out until the final amount is filled in.'],
-    ['Clients who paid more than the final amount', D.clients.filter(c => clientFinal(c) && paidOf(clientPayments(c.id)) > clientFinal(c)).map(c => cl(c) + ` <span class="muted">(${inr(paidOf(clientPayments(c.id)) - clientFinal(c))} extra)</span>`),
+    ['Clients who paid more than the final amount', D.clients.filter(c => clientFinal(c) && clientPaid(c) > clientFinal(c)).map(c => cl(c) + ` <span class="muted">(${inr(clientPaid(c) - clientFinal(c))} extra)</span>`),
       'Usually the ₹1,100 hold amount counted on top of the final amount. Check the final amount or the payments.'],
-    ['Lapsed clients with money paid and no refund marked', D.clients.filter(c => clientStatus(c)[0] === 'Lapsed' && paidOf(clientPayments(c.id)) > 1100 && !c.bookings.some(id => /^refunded/i.test(bookingById[id].refunded || ''))).map(c => cl(c) + ` <span class="muted">(${inr(paidOf(clientPayments(c.id)))})</span>`),
+    ['Lapsed clients with money paid and no refund marked', D.clients.filter(c => clientStatus(c)[0] === 'Lapsed' && clientPaid(c) > 1100 && !c.bookings.some(id => /^refunded/i.test(bookingById[id].refunded || ''))).map(c => cl(c) + ` <span class="muted">(${inr(paidOf(clientPayments(c.id)))})</span>`),
       'Their hold lapsed but more than the hold amount was paid. Check whether they actually bought another plot, or mark the refund.'],
     ['Old owners with no booking', Object.entries(D.plotOwners).filter(([pl, id]) => clientById[id] && !(plotBk[pl] || {}).conv).map(([pl, id]) => cl(clientById[id]) + ' <span class="muted">(plot ' + esc(pl) + ')</span>'),
       'These came from the Dastavej or Registry sheets, not from a booking.'],
