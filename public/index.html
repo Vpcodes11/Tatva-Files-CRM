@@ -364,7 +364,8 @@ function visitSrs() {
 }
 const visitSrLabel = (v, m = visitSrs()) => (isLapsedVisit(v) ? 'Lapsed Sr. ' : 'Follow up Sr. ') + (m.get(v.id) || '—');
 // The Remark holds the old follow-up notes as "FU1 21/07/26: note · FU2: note · …". remarkHtml() shows each follow-up
-// on its own line (FU label, short date, note), with plain notes before and after. The saved text is not changed.
+// on its own line (FU label, short date, note), with plain notes before and after, on the visit page. The Site visits
+// list shows only the latest follow-up (full remark on hover). The saved text is not changed.
 const FU_RE = /^FU([1-4])(?:\s+(\d\d)\/(\d\d)\/(\d\d))?\s*:\s*([\s\S]*)$/;
 function remarkParts(r) {
   const out = {before: [], fus: [], after: []};
@@ -375,6 +376,8 @@ function remarkParts(r) {
 function remarkHtml(r, full) {
   if (!r) return '<span class="muted">—</span>';
   const p = remarkParts(r); if (!p.fus.length) return full ? `<div class="rmk full"><div class="last">${esc(r)}</div></div>` : `<span class="muted clip">${esc(r)}</span>`;
+  if (!full) { const f = p.fus[p.fus.length - 1]; // list: only the latest follow-up; the visit page shows them all
+    return `<div class="rmk" title="${esc(r)}"><div class="last"><span class="fu f${f.n}">FU${f.n}</span> ${f.date ? `<span class="fu-d">${f.date}</span> ` : ''}${esc(f.text || '—')}</div></div>`; }
   const who = n => full && n >= 3 ? ` <span class="muted">(${n === 3 ? 'Sahil Bhai' : 'Pratik Sir'})</span>` : '';
   const lines = [...p.before.map(x => `<div>${esc(x)}</div>`),
     ...p.fus.map((f, i) => `<div${i === p.fus.length - 1 ? ' class="last"' : ''}><span class="fu f${f.n}">FU${f.n}</span> ${f.date ? `<span class="fu-d">${f.date}</span> ` : ''}${esc(f.text || '—')}${who(f.n)}</div>`),

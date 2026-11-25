@@ -16,14 +16,16 @@ with sync_playwright() as p:
     ok([f['date'] for f in parts['fus']] == ['21 Jul 26', '14 Sep 26', None] and parts['fus'][2]['text'] == 'CNR', 'follow-up dates and notes read correctly: %s' % parts['fus'])
     ok(q("remarkParts('came with family, liked corner plots').fus.length") == 0, 'a plain remark has no follow-ups')
 
-    # list: one line per follow-up, latest highlighted, full text on hover
+    # list: only the latest follow-up, full text on hover
     vid = q("D.visits.find(v => /FU1 21\\/07\\/26: Call Not Received/.test(v.remark || '')).id"); raw = q(f"IDX.visits['{vid}'].remark")
     q("listView.visitsLapsed = false"); go('#/visits')
     if not q(f"!!document.querySelector('tr[data-go=\"#/visit/{vid}\"]')"): q("listView.visitsLapsed = true"); go('#/visits')
     cell = f'tr[data-go="#/visit/{vid}"] .rmk'
-    ok(q(f"[...document.querySelectorAll('{cell} .fu')].map(x => x.textContent)") == ['FU1', 'FU2', 'FU3'], 'Site visits list shows FU1, FU2, FU3 pills')
-    ok(q(f"document.querySelector('{cell} .last').textContent").startswith('FU3') and q(f"document.querySelector('{cell}').title") == raw, 'latest follow-up is highlighted and the full remark shows on hover')
-    ok(q(f"document.querySelector('{cell} .nt').textContent") == '3 Calls But Not Received', 'closing note shown on its own line')
+    ok(q(f"[...document.querySelectorAll('{cell} .fu')].map(x => x.textContent)") == ['FU3'], 'Site visits list shows only the latest follow-up (FU3)')
+    ok(q(f"document.querySelector('{cell}').innerText.replace(/\\s+/g, ' ').trim()") == 'FU3 CNR' and q(f"document.querySelector('{cell}').title") == raw, 'only "FU3 CNR" is shown; the full remark shows on hover')
+    two = q("D.visits.find(v => /^FU1 [^·]*· FU2 \\d\\d\\/\\d\\d\\/\\d\\d: [^·]*$/.test(v.remark || '') && vStatus(v)[0] !== 'Lapsed').id")
+    q("listView.visitsLapsed = false"); go('#/visits')
+    ok(q(f"[...document.querySelectorAll('tr[data-go=\"#/visit/{two}\"] .rmk > div')].map(d => d.innerText.replace(/\\s+/g, ' ').trim())") == [q(f"'FU2 ' + remarkParts(IDX.visits['{two}'].remark).fus[1].date + ' ' + remarkParts(IDX.visits['{two}'].remark).fus[1].text")], 'a visit with FU1 and FU2 shows just its FU2 line in the list')
 
     # visit page: full lines, with who does FU3 / FU4
     go(f'#/visit/{vid}')
