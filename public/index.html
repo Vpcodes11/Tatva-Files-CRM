@@ -72,6 +72,21 @@ h1{font-size:22px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .btn.small{padding:4px 10px;font-size:12.5px}
 .grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px 22px}
+.grid2.g3{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 18px}
+.pcols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 32px}.pcols>div{min-width:0}
+@media(max-width:1250px){.pcols{grid-template-columns:1fr}}
+.tgl{display:inline-flex;align-items:center;gap:8px;border:0;background:none;padding:0;font:inherit;font-weight:550;color:var(--ink);cursor:pointer}
+.tgl i{position:relative;width:30px;height:17px;border-radius:9px;background:var(--line2);transition:background .15s;flex:none}
+.tgl i:after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:#fff;transition:left .15s}
+.tgl.on i{background:var(--sold)}.tgl.on i:after{left:15px}
+.tgl:disabled{cursor:not-allowed;color:var(--ink3)}.tgl:disabled i{opacity:.5}
+.dpw{position:relative;display:inline-block;outline:none}
+.dpw .dpn{font-weight:400;font-size:12px;color:var(--accent);border-bottom:1px dashed var(--accent);cursor:default;margin-left:4px}
+.dpop{display:none;position:absolute;z-index:30;top:calc(100% + 4px);left:0;min-width:300px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.12);padding:10px 12px;font-weight:400;font-size:12.5px}
+.dpw:hover .dpop,.dpw:focus-within .dpop{display:block}
+.dpop table{font-size:12.5px}.dpop td{padding:3px 8px 3px 0;white-space:nowrap}.dpop td.r{text-align:right;padding-right:0}
+.dpop tfoot td{border-top:1px solid var(--line);font-weight:600;padding-top:5px}
+.dpop .x{text-decoration:line-through;color:var(--ink3)}
 .kv small{display:block;font-size:11.5px;color:var(--ink3)}.kv div{font-weight:550}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;font-weight:600;color:var(--ink3);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -317,17 +332,20 @@ function applyFlow(f) {
     if (f.amount) D.payments.push(newPay(f, 'Hold amount · plot ' + f.plot, f.amount, f.mode, [f.plot], c.id));
   } else if (f.type === 'book') {
     const b = D.bookings.find(x => x.id === f.bid); if (!b) return;
-    Object.assign(b, {outcome: 'Converted', finalAmount: f.final, dpAmount: f.amount || null, dpDate: f.date, dpMode: f.mode, loan: f.loan, loanAmount: f.loanAmount || null, emi: f.emi || null});
+    Object.assign(b, {outcome: 'Converted', finalAmount: f.final, bookingAmount: f.amount || null, bookingDate: f.date, bookingMode: f.mode, loan: f.loan, loanAmount: f.loanAmount || null, emi: f.emi || null});
     if (P[b.plot]) P[b.plot].status = 'SOLD OUT';
     D.plotOwners[b.plot] = f.cid;
     const c = D.clients.find(x => x.id === f.cid); if (c && !c.docStatus) c.docStatus = 'MOU not done';
     const v = D.visits.find(x => x.id === f.vid); if (v) v.status = 'Converted';
     if (f.amount) D.payments.push(newPay(f, 'Booking amount · plot ' + b.plot, f.amount, f.mode, [b.plot], f.cid));
   } else if (f.type === 'pay') {
-    D.payments.push(newPay(f, f.text || 'Payment' + (f.plot ? ' · plot ' + f.plot : ''), f.amount, f.mode, f.plot ? [f.plot] : [], f.cid));
+    const np = newPay(f, f.text || 'Payment' + (f.plot ? ' · plot ' + f.plot : ''), f.amount, f.mode, f.plot ? [f.plot] : [], f.cid);
+    if (f.dpOf) np.dpOf = f.dpOf; // a down payment (DP) instalment of this booking
+    D.payments.push(np);
   } else if (f.type === 'lapse') {
     const b = D.bookings.find(x => x.id === f.bid); if (!b) return;
     Object.assign(b, {outcome: 'Lapsed', refunded: f.refund ? 'Refunded' : 'Not Refunded', refundDate: f.refund ? f.date : null});
+    if (f.refund && b.refundAmount == null) Object.assign(b, {refundAmount: b.holdAmount || null, refundMode: b.holdMode || null});
     if (P[b.plot] && /HOLD/i.test(P[b.plot].status || '')) P[b.plot].status = 'UNSOLD';
   }
 }
@@ -424,6 +442,16 @@ const clientFinal = c => { const conv = c.bookings.map(id => bookingById[id]).fi
   const deeds = clientPlots(c).map(p => D.dastavej[p]).filter(d => d && d.finalAmount); return deeds.length ? deeds.reduce((s, d) => s + d.finalAmount, 0) : null; };
 const lastHoldBooking = c => c.bookings.map(id => bookingById[id]).filter(b => b.holdDate || b.holdAmount).sort((a, b) => String(a.holdDate || '').localeCompare(String(b.holdDate || ''))).pop() || null;
 const clientDate = c => { const ds = c.bookings.map(id => bookingById[id]).flatMap(b => [b.holdDate, b.dpDate, b.bookingDate]).filter(d => d && /^\d{4}-\d\d-\d\d/.test(d)).sort(); return ds.length ? ds[ds.length - 1] : null; };
+// Booking money. Refund only applies to a lapsed hold. Down payment (DP) can come in several instalments: each one is a
+// payment linked to the booking (dpOf), plus the single DP typed on the booking itself (old sheet data / pencil).
+const isRefunded = b => /^refunded/i.test(b.refunded || '');
+const isLapsedBooking = b => !!b.outcome && !isConvertedBooking(b) && !/hold/i.test(b.outcome);
+function dpEntries(b) {
+  const own = b.dpAmount || b.dpDate ? [{date: b.dpDate, amount: b.dpAmount, mode: b.dpMode, typed: true}] : [];
+  return own.concat(D.payments.filter(p => p.dpOf === b.id).map(p => ({date: p.date, amount: p.amount, mode: p.mode, note: p.note, returned: !received(p), pid: p.id}))
+    .sort((x, y) => String(x.date || '').localeCompare(String(y.date || ''))));
+}
+const dpTotal = b => { const e = dpEntries(b).filter(x => !x.returned && x.amount); return e.length ? e.reduce((a, x) => a + x.amount, 0) : null; };
 const amtCell = (p, html) => received(p) ? html : `<span style="text-decoration:line-through;color:var(--ink3)">${html}</span>`;
 const payBadge = p => received(p) ? '<span class="badge b-sold">Received</span>' : '<span class="badge b-lapsed">Cheque returned</span>';
 function plotClass(p) {
@@ -448,7 +476,7 @@ const OPTS = {
   plotStatus: ['UNSOLD', 'HOLD', 'SOLD OUT', 'DEVELOPMENT AREA'],
   forWhat: ['Plots', 'Villas', 'Plots, Villas'],
   method: ['Cash', 'Online', 'Cheque', 'Plot'],
-  payMode: ['Cash', 'Online', 'Cheque', 'UPI', 'NEFT', 'RTGS'],
+  payMode: ['Cash', 'Online', 'Cheque', 'UPI', 'NEFT', 'RTGS', 'Other'],
   yesNo: ['Yes', 'No'],
   docStatus: DOC_OPTS,
   payStatus: ['Received', 'Cheque returned'],
@@ -458,6 +486,7 @@ const OPTS = {
 // ---------- inline editing ----------
 const ROLE = () => ME.role;
 function lockReason(coll, o, f) {
+  if (coll === 'bookings' && (f === 'refundAmount' || f === 'refundMode') && !isRefunded(o)) return 'Turn Refund on first (only for a lapsed hold).';
   if (coll === 'plots' && f === 'status' && plotBk[o.no] && (plotBk[o.no].conv || plotBk[o.no].hold)) return 'This plot has a ' + (plotBk[o.no].conv ? 'Converted booking' : 'hold') + ', so its status follows the booking. Change the booking instead.';
   if (coll === 'visits' && f === 'status' && o.client && clientById[o.client] && !clientLapsed(clientById[o.client])) return 'This visit is linked to a client folder, so its status follows the folder (Hold or Converted). Change it from the client folder.';
   if (ROLE() !== 'Agent') return null;
@@ -476,7 +505,7 @@ function ed(coll, o, f, kind = 'text', opt = '', shown) {
 const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const PEN_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const FIELD_LABELS = {date: 'Date', name: 'Name', phone: 'Phone', by: 'Agent', status: 'Status', extra: 'Note', remark: 'Remark', docStatus: 'Document status',
-  holdDate: 'Hold date', holdAmount: 'Hold amount', holdMode: 'Hold paid by', refunded: 'Refund', finalAmount: 'Final amount', dpAmount: 'Down payment', dpDate: 'Down payment date',
+  holdDate: 'Hold date', holdAmount: 'Hold amount', holdMode: 'Hold mode', bookingAmount: 'Booking amount', bookingMode: 'Booking mode', refundAmount: 'Refund amount', refundMode: 'Refund mode', dpMode: 'DP mode', refunded: 'Refund', finalAmount: 'Final amount', dpAmount: 'DP amount', dpDate: 'DP date',
   loan: 'Loan', loanAmount: 'Loan amount', emi: 'EMI', payment: 'Payment status', mou: 'MOU', dastavejStatus: 'Dastavej status', maintenanceCheque: 'Maintenance cheque', outcome: 'Booking status',
   client: 'Client name', onlineCheque: 'Online / cheque', cash: 'Cash', fy: 'Financial year', kind: 'Type', vakilAmount: 'Vakil fee', vakilDate: 'Vakil date', maintenanceAmount: 'Maintenance deposit', maintenanceDate: 'Deposit date',
   owner: 'Owner', plot: 'Plot', sqYard: 'Sq yard', saleValue: 'Total sale value', anjaneePaid: 'Anjanee paid', area: 'Area (sq yd)', note: 'Note', particulars: 'Particulars', for: 'For', type: 'Type', amount: 'Amount', method: 'Paid by', remarks: 'Remarks',
@@ -765,7 +794,7 @@ const openAddVisit = () => {
   <div id="nv_deal" style="display:none;gap:12px">
     <label>Plot * <span class="muted">(unsold plots only)</span><select id="nv_plot"><option value="">Choose a plot</option>${freePlots().map(p => `<option value="${esc(p.no)}">Plot ${esc(p.no)}${p.area ? ' · ' + p.area + ' sq yd' : ''}</option>`).join('')}</select></label>
     <div class="g2" id="nv_holdf"><label>Hold amount<input id="nv_hamt" type="number" value="1100"></label><label>Hold paid by${modeSel('nv_hmode', 'Cash')}</label></div>
-    <div class="g2" id="nv_bookf"><label>Final amount *<input id="nv_final" type="number" placeholder="Agreed price"></label><label>Booking amount / down payment<input id="nv_bamt" type="number"></label><label>Paid by${modeSel('nv_bmode', 'Cheque')}</label></div>
+    <div class="g2" id="nv_bookf"><label>Final amount *<input id="nv_final" type="number" placeholder="Agreed price"></label><label>Booking amount<input id="nv_bamt" type="number"></label><label>Paid by${modeSel('nv_bmode', 'Cheque')}</label></div>
   </div>
   <label>Remark<textarea id="nv_remark" rows="3" placeholder="Anything about the visit: people, budget, plots liked, what to talk about next…"></textarea></label>`, 'Save visit', () => saveNew('visit'), true);
 };
@@ -778,6 +807,17 @@ const today = () => new Date().toISOString().slice(0, 10);
 const stamp = () => Date.now().toString(36);
 function runFlow(f, msg, go) {
   const s = snap(); applyFlow(f); closeDlg(); commit(s, [f], msg, go);
+}
+// Refund switch on a lapsed hold. Turning it on fills Refund amount / mode with the hold amount / mode when empty.
+function toggleRefund(bid) {
+  const b = bookingById[bid]; if (!b || !isLapsedBooking(b) || saving) return;
+  const on = !isRefunded(b); const label = describe('bookings', b);
+  const ch = [['refunded', on ? 'Refunded' : 'Not Refunded']];
+  if (on && b.refundAmount == null && b.holdAmount) ch.push(['refundAmount', b.holdAmount]);
+  if (on && b.refundMode == null && b.holdMode) ch.push(['refundMode', b.holdMode]);
+  sendOps(ch.map(([f, v]) => ({op: 'patch', coll: 'bookings', id: b.id, field: f, value: v, label})))
+    .then(() => { ch.forEach(([f, v]) => { setF('bookings', b, f, v); editedSet.add('bookings|' + b.id + '|' + f); }); render(); toast(on ? 'Marked refunded' : 'Marked not refunded'); })
+    .catch(e => toast(e.message));
 }
 function flowDlg(ds) {
   const err = m => { $('#dlg_err').textContent = m; return false; };
@@ -810,7 +850,7 @@ function flowDlg(ds) {
     const vlist = D.visits.filter(x => x.client === c.id).sort((a, z) => String(z.date || '').localeCompare(String(a.date || '')));
     openDlg('Book plot ' + esc(b.plot), esc(c.name) + ' · on hold since ' + fd(b.holdDate) + (pl && pl.area ? ' · ' + pl.area + ' sq yd' : ''), `
     <label>Final amount * <span class="muted">(the agreed price of the plot)</span><input id="fb_final" type="number" placeholder="e.g. 1100000"></label>
-    <div class="g2"><label>Booking amount / down payment<input id="fb_amt" type="number" placeholder="Amount received now"></label><label>Date *<input id="fb_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>Booking amount<input id="fb_amt" type="number" placeholder="Amount received now"></label><label>Date *<input id="fb_date" type="date" value="${today()}"></label></div>
     <div class="g2"><label>Paid by${modeSel('fb_mode', 'Cheque')}</label><label>Loan<select id="fb_loan"><option>No</option><option>Yes</option></select></label></div>
     <div class="g2"><label>Loan amount<input id="fb_lamt" type="number"></label><label>EMI<input id="fb_emi" type="number"></label></div>
     <div class="note" style="margin:0">Saving marks the plot Sold, the booking Converted${vlist.length ? ' and the site visit Converted' : ''}. The document status starts as "MOU not done".</div>`, 'Book plot', () => {
@@ -820,6 +860,17 @@ function flowDlg(ds) {
         loan: $('#fb_loan').value, loanAmount: num('#fb_lamt'), emi: num('#fb_emi'), pid: 'PN' + s, psr: maxSr(D.payments) + 1};
       runFlow(f, 'Plot ' + b.plot + ' booked for ' + c.name);
     }, true);
+  } else if (ds.flow === 'dp') {
+    const b = bookingById[ds.bid]; const c = clientById[ds.cid]; const n = dpEntries(b).length;
+    openDlg('Add DP · plot ' + esc(b.plot || ''), esc(c.name) + (n ? ' · DP so far ' + inr(dpTotal(b)) + ' in ' + n + ' payment' + (n > 1 ? 's' : '') : ' · first down payment'), `
+    <div class="g2"><label>DP amount *<input id="fd_amt" type="number"></label><label>DP date *<input id="fd_date" type="date" value="${today()}"></label></div>
+    <div class="g2"><label>DP mode${modeSel('fd_mode', 'Cheque')}</label><label>Note<input id="fd_note" placeholder="e.g. 3rd instalment, cheque no. 000123"></label></div>
+    <div class="note" style="margin:0">Saved as a payment of this client, so it counts in Paid till now.</div>`, 'Save DP', () => {
+      const amount = num('#fd_amt'); if (!amount) return err('Enter the DP amount.'); if (!$('#fd_date').value) return err('Enter the DP date.');
+      const f = {type: 'pay', at: new Date().toISOString(), role: ROLE(), cid: c.id, pid: 'PD' + stamp(), psr: maxSr(D.payments) + 1, amount, date: $('#fd_date').value, mode: $('#fd_mode').value,
+        plot: b.plot || null, note: $('#fd_note').value.trim() || null, text: 'Down payment (DP)' + (b.plot ? ' · plot ' + b.plot : ''), dpOf: b.id};
+      runFlow(f, inr(amount) + ' DP added for ' + c.name);
+    });
   } else if (ds.flow === 'pay') {
     const c = clientById[ds.cid]; const plots = clientPlots(c);
     openDlg('Add payment', esc(c.name), `
@@ -898,21 +949,41 @@ V.client = id => {
   const multi = plots.length > 1; let sel = clientSel[id]; if (!sel || (sel !== 'all' && !plots.includes(sel))) sel = multi ? plots[0] : 'all';
   const mine = new Set(plots);
   const plotPaid = pn => pays.filter(received).reduce((a, p) => { const own = (p.plots || []).filter(x => mine.has(x)); return own.includes(pn) ? a + (p.amount || 0) / own.length : a; }, 0);
-  const priceOf = pn => { const l = plotOwner[pn] === id && D.landowners.find(x => x.plot === pn); return l ? l.saleValue : null; };
-  const finalOf = pn => { const b = bks.find(x => x.plot === pn && isConvertedBooking(x)) || bks.find(x => x.plot === pn); return b ? b.finalAmount : null; };
+  // a lapsed hold has no price to pay any more, so only a Converted booking or an active hold gives the final amount
+  const finalOf = pn => { const b = bks.find(x => x.plot === pn && isConvertedBooking(x)) || bks.find(x => x.plot === pn && /hold/i.test(x.outcome || ''));
+    return b && b.finalAmount != null ? b.finalAmount : owned.includes(pn) && D.dastavej[pn] ? D.dastavej[pn].finalAmount ?? null : null; };
   const sum = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((s, x) => s + x, 0) : null; };
   const H = sel === 'all'
-    ? {no: plots.join(', ') || '—', size: clientSize(c), price: sum(plots.map(priceOf)), final, paid}
-    : {no: sel, size: D.plots[sel] ? D.plots[sel].area : null, price: priceOf(sel), final: finalOf(sel), paid: Math.round(plotPaid(sel))};
+    ? {no: plots.join(', ') || '—', size: clientSize(c), final: sum(plots.map(finalOf)) ?? final, paid}
+    : {no: sel, size: D.plots[sel] ? D.plots[sel].area : null, final: finalOf(sel), paid: Math.round(plotPaid(sel))};
   const rem = H.final != null ? H.final - H.paid : null;
+  const perYd = H.final != null && H.size ? Math.round(H.final / H.size) : null;
   const shownPlots = sel === 'all' ? plots : [sel];
   const shownPays = sel === 'all' ? pays : pays.filter(p => (p.plots || []).includes(sel));
   const plotCard = p => {
     const bp = bks.filter(x => x.plot === p); const b = bp.find(isConvertedBooking) || bp.find(x => /hold/i.test(x.outcome || '')) || bp[bp.length - 1]; const d = owned.includes(p) ? D.dastavej[p] : null; const r = owned.includes(p) ? D.registry[p] : null; const pl = D.plots[p];
-    return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : /hold/i.test(b.outcome || '') ? 'b-hold' : 'b-lapsed'}">${val(b.outcome)}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
-    ${b && /hold/i.test(b.outcome || '') ? `<div class="acts"><span>This plot is on hold since ${fd(b.holdDate)}.</span><button class="btn primary small" data-flow="book" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Book this plot</button><button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Hold lapsed</button></div>` : ''}
-    ${b ? `<div class="psub">Hold and booking</div>${kv([['Hold date', ed('bookings', b, 'holdDate', 'date')], ['Hold amount', ed('bookings', b, 'holdAmount', 'money')], ['Hold paid by', ed('bookings', b, 'holdMode', 'select', 'payMode')], ['Refund', ed('bookings', b, 'refunded')], ['Plot final amount', ed('bookings', b, 'finalAmount', 'money')], ['Down payment', ed('bookings', b, 'dpAmount', 'money')], ['Down payment date', ed('bookings', b, 'dpDate', 'date')], ['Loan', ed('bookings', b, 'loan', 'select', 'yesNo')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')], ['Payment status', ed('bookings', b, 'payment')]])}` : ''}
-    ${b || d ? `<div class="psub">MOU and dastavej</div>${kv([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}` : ''}
+    const hold = b && /hold/i.test(b.outcome || '');
+    const refund = b => { const can = isLapsedBooking(b), on = isRefunded(b);
+      return `<button type="button" class="tgl${on ? ' on' : ''}" data-refund="${esc(b.id)}"${can ? '' : ' disabled title="Refund is only for a hold that lapsed"'}><i></i>${on ? 'Refunded' : 'Not refunded'}</button>`; };
+    const dpCells = b => { const ents = dpEntries(b), pays = ents.filter(x => !x.typed), last = ents[ents.length - 1] || {};
+      const add = isLapsedBooking(b) ? '' : `<div><button class="btn small" style="margin-top:4px" data-flow="dp" data-bid="${esc(b.id)}" data-cid="${esc(id)}">+ Add DP</button></div>`;
+      const pop = ents.length ? `<div class="dpop"><b style="display:block;margin-bottom:6px">DP payments · plot ${esc(b.plot || '')}</b><table><tbody>${ents.map(x => `<tr${x.returned ? ' class="x" title="Cheque returned: not counted"' : ''}><td>${fd(x.date)}</td><td>${esc(x.mode || '—')}</td><td class="muted">${x.typed ? 'on the booking' : esc(x.note || '')}</td><td class="r">${inr(x.amount)}</td></tr>`).join('')}</tbody><tfoot><tr><td colspan="3">Total</td><td class="r">${inr(dpTotal(b))}</td></tr></tfoot></table></div>` : '';
+      const total = pays.length ? inr(dpTotal(b)) : ed('bookings', b, 'dpAmount', 'money');
+      return [['DP date', pays.length ? fd(last.date) : ed('bookings', b, 'dpDate', 'date')],
+        ['DP amount', `<span class="dpw" tabindex="0">${total}${ents.length ? `<span class="dpn">${ents.length} payment${ents.length > 1 ? 's' : ''}</span>` : ''}${pop}</span>${add}`],
+        ['DP mode', pays.length ? esc([...new Set(ents.map(x => x.mode).filter(Boolean))].join(', ') || '—') : ed('bookings', b, 'dpMode', 'select', 'payMode')]]; };
+    const kv3 = pairs => kv(pairs).replace('<div class="grid2">', '<div class="grid2 g3">');
+    const hb = b ? `<div class="psub">Hold and booking</div>${kv3([
+        ['Hold date', ed('bookings', b, 'holdDate', 'date')], ['Hold amount', ed('bookings', b, 'holdAmount', 'money')], ['Hold mode', ed('bookings', b, 'holdMode', 'select', 'payMode')],
+        ['Refund', refund(b)], ['Refund amount', ed('bookings', b, 'refundAmount', 'money')], ['Refund mode', ed('bookings', b, 'refundMode', 'select', 'payMode')],
+        ['Booking date', ed('bookings', b, 'bookingDate', 'date')], ['Booking amount', ed('bookings', b, 'bookingAmount', 'money')], ['Booking mode', ed('bookings', b, 'bookingMode', 'select', 'payMode')]])}
+      ${kv3(dpCells(b))}
+      <div class="psub">Final amount and loan</div>${kv3([['Final amount', ed('bookings', b, 'finalAmount', 'money')], ['Loan', ed('bookings', b, 'loan', 'select', 'yesNo')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')],
+        ['EMI', ed('bookings', b, 'emi', 'money')], ['Payment status', ed('bookings', b, 'payment')]])}` : '';
+    const mou = b || d ? `<div class="psub">MOU and dastavej</div>${kv3([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}` : '';
+    return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : hold ? 'b-hold' : 'b-lapsed'}">${val(b.outcome)}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
+    ${hold ? `<div class="acts"><span>This plot is on hold since ${fd(b.holdDate)}.</span><button class="btn primary small" data-flow="book" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Booked</button><button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Lapsed</button></div>` : ''}
+    <div class="pcols"><div>${hb}</div><div>${mou}</div></div>
     ${r ? `<div class="psub">Registry and maintenance</div>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance deposit', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')], ['Maintenance cheque', b ? ed('bookings', b, 'maintenanceCheque') : '—']])}` : ''}
     ${b && (b.remarks || b.paymentRemarks || b.dastavejRemarks) ? `<p class="muted" style="margin:12px 0 0">${esc([b.remarks, b.paymentRemarks, b.dastavejRemarks].filter(Boolean).join(' · '))}</p>` : ''}</div>`; };
   const payT = shownPays.length ? tbl('pay-' + c.id + '-' + sel, [
@@ -928,7 +999,7 @@ V.client = id => {
   ${multi ? `<div class="row" style="gap:6px;margin:0 0 12px;flex-wrap:wrap"><span class="muted" style="font-size:12.5px;margin-right:4px">Show plot</span>${plots.map(pn => `<span class="chip${sel === pn ? ' on' : ''}" data-cid="${esc(id)}" data-csel="${esc(pn)}">Plot ${esc(pn)}</span>`).join('')}<span class="chip${sel === 'all' ? ' on' : ''}" data-cid="${esc(id)}" data-csel="all">All plots</span></div>` : ''}
   <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(128px,1fr))"><div class="stat"><small>Plot no.</small><div>${esc(H.no)}</div></div>
   <div class="stat"><small>Plot size</small><div>${H.size != null ? (Math.round(H.size * 100) / 100).toLocaleString('en-IN') + ' <span style="font-size:12px;color:var(--ink3)">sq yd</span>' : '—'}</div></div>
-  <div class="stat"><small>Plot price</small><div>${inr(H.price)}</div></div>
+  <div class="stat"><small>Price per sq yd</small><div>${perYd != null ? inr(perYd) : '—'}</div></div>
   <div class="stat"><small>Final amount</small><div>${inr(H.final)}</div></div>
   <div class="stat"><small>Paid till now</small><div>${inr(H.paid)}</div></div>
   <div class="stat"><small>Remaining balance</small><div style="color:${rem != null && rem > 0 ? 'var(--lapsed)' : 'var(--sold)'}">${rem != null ? inr(rem) : '—'}</div></div>
@@ -1189,7 +1260,9 @@ function exportAll() {
     raw('Bookings', [...D.bookings].sort((a, b) => (a.sr || 0) - (b.sr || 0)), [
       {label: 'Sr.', type: 'num', get: b => b.sr}, {label: 'Client', get: b => b.client}, {label: 'Phone', get: b => b.phone}, {label: 'Plot', get: b => b.plot}, {label: 'Agent', get: b => b.by},
       {label: 'Hold date', type: 'date', get: b => b.holdDate}, {label: 'Hold amount', type: 'money', get: b => b.holdAmount}, {label: 'Status', get: b => b.outcome},
-      {label: 'Final amount', type: 'money', get: b => b.finalAmount}, {label: 'Down payment', type: 'money', get: b => b.dpAmount}, {label: 'Down payment date', type: 'date', get: b => b.dpDate},
+      {label: 'Hold mode', get: b => b.holdMode}, {label: 'Refund amount', type: 'money', get: b => b.refundAmount}, {label: 'Refund mode', get: b => b.refundMode},
+      {label: 'Booking date', type: 'date', get: b => b.bookingDate}, {label: 'Booking amount', type: 'money', get: b => b.bookingAmount}, {label: 'Booking mode', get: b => b.bookingMode},
+      {label: 'Final amount', type: 'money', get: b => b.finalAmount}, {label: 'DP total', type: 'money', get: dpTotal}, {label: 'DP payments', type: 'num', get: b => dpEntries(b).length || null}, {label: 'Last DP date', type: 'date', get: b => (dpEntries(b).slice(-1)[0] || {}).date || null},
       {label: 'Loan', get: b => b.loan}, {label: 'Loan amount', type: 'money', get: b => b.loanAmount}, {label: 'EMI', type: 'money', get: b => b.emi}, {label: 'Refund', get: b => b.refunded}, {label: 'Remarks', get: b => b.remarks}]);
     raw('Payments', [...D.payments].sort((a, b) => (a.sr || 0) - (b.sr || 0)), [
       {label: 'Sr.', type: 'num', get: p => p.sr}, {label: 'Date', type: 'date', get: p => p.date}, {label: 'Entry', get: p => p.text}, {label: 'Amount', type: 'money', get: p => p.amount},
@@ -1404,6 +1477,7 @@ document.addEventListener('click', e => {
   const cg = t.closest('[data-cgroup]'); if (cg) { const G = listView.clientGroups, k = cg.dataset.cgroup; G[k] = !G[k]; if (!Object.values(G).some(Boolean)) G[k] = true; render(); return; }
   const lv = t.closest('[data-lv]'); if (lv) { listView[lv.dataset.lv] = lv.dataset.lv === 'soldReg' ? lv.dataset.val : !!lv.dataset.val; render(); return; }
   const ph = t.closest('[data-phase]'); if (ph) { const k = ph.dataset.phase, o = k === 'after' ? 'before' : 'after'; plotView[k] = !plotView[k]; if (!plotView[k] && !plotView[o]) plotView[o] = true; render(); return; }
+  const rf = t.closest('[data-refund]'); if (rf) { toggleRefund(rf.dataset.refund); return; }
   const cs = t.closest('[data-csel]'); if (cs) { clientSel[cs.dataset.cid] = cs.dataset.csel; render(); return; }
   const pv = t.closest('[data-pv]'); if (pv) { plotView.mode = pv.dataset.pv; render(); return; }
   if (t.closest('[data-addvisit]')) { openAddVisit(); return; }

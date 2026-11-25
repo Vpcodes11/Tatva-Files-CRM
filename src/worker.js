@@ -26,7 +26,31 @@ async function ensureSchema(env) {
   if (schemaReady) return;
   await env.DB.batch(SCHEMA.map(s => env.DB.prepare(s)));
   await migrateVisitRemarks(env);
+  await migrateBookingAmounts(env);
   schemaReady = true;
+}
+
+// One-time change (Nov 2026): the client folder now has separate Booking date / amount / mode. Bookings made in
+// the CRM before this saved the booking amount in the down payment fields (dpAmount/dpDate/dpMode). Move it, but
+// only where the matching "Booking amount · plot" payment exists, so a down payment typed by hand stays a DP.
+async function migrateBookingAmounts(env) {
+  const done = await env.DB.prepare("SELECT value FROM meta WHERE key = 'migr_booking_amount'").first('value');
+  if (done) return;
+  const all = coll => env.DB.prepare('SELECT id, data FROM records WHERE coll = ?').bind(coll).all().then(r => r.results.map(x => JSON.parse(x.data)));
+  const [bookings, payments] = [await all('bookings'), await all('payments')];
+  const stmts = [];
+  for (const b of bookings) {
+    if (!b.added || !b.dpAmount || b.bookingAmount != null || !/convert/i.test(b.outcome || '')) continue;
+    const paid = payments.some(p => /^booking amount/i.test(p.text || '') && p.amount === b.dpAmount && (p.plots || []).includes(b.plot) && (p.clients || []).includes(b.cid));
+    if (!paid) continue;
+    Object.assign(b, {bookingAmount: b.dpAmount, bookingDate: b.dpDate ?? null, bookingMode: b.dpMode ?? null, dpAmount: null, dpDate: null, dpMode: null});
+    stmts.push(env.DB.prepare("UPDATE records SET data = ?, updated_by = 'update' WHERE coll = 'bookings' AND id = ?").bind(JSON.stringify(b), b.id));
+  }
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('migr_booking_amount', ?)").bind(String(stmts.length)),
+    env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'")
+  ]);
 }
 
 // One-time change (Nov 2026): site visits keep a single Remark. The old Note, follow-up dates/notes
