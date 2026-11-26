@@ -26,4 +26,7 @@ with sync_playwright() as p:
     a.evaluate(E, f"location.hash='#/visit/{vid}'"); a.wait_for_timeout(250)
     ok(a.evaluate("[...document.querySelectorAll('.ed')].every(e => getComputedStyle(e).boxShadow === 'none')"), 'no yellow underline on edited fields')
     ok('in this browser' not in a.inner_text('#view'), 'no leftover "added in this browser" wording')
+    a.evaluate(E, "location.hash='#/clients'"); a.wait_for_timeout(250)
+    heads = a.evaluate("[...document.querySelectorAll('thead th')].map(t => t.innerText.trim().toLowerCase())")
+    ok('last hold date' not in heads and 'hold amount' not in heads, 'Clients list has no Last hold date / Hold amount columns: %s' % heads)
     print('ERRORS', errs)
