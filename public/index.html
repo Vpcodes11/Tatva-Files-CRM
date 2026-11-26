@@ -177,6 +177,11 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .rmk.full{max-width:none}.rmk.full>div{white-space:normal}
 .rmk .nt{font-style:italic}
 .fu{display:inline-block;min-width:30px;text-align:center;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:9px;margin-right:2px;background:var(--accent-bg);color:var(--accent);vertical-align:1px}
+.newag{display:inline-flex;gap:4px;align-items:center}.newag input{width:150px;padding:4px 8px;font-size:12.5px}
+.fu.f0{background:var(--line);color:var(--ink2)}
+.rcell{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.addq{flex:none;border:1px solid var(--line);background:var(--panel);color:var(--accent);border-radius:6px;font:600 11.5px/1 inherit;padding:4px 7px;cursor:pointer;white-space:nowrap;opacity:.7}
+.addq:hover,tr:hover .addq{opacity:1;border-color:var(--accent)}
 .fu.f3{background:var(--diff-bg);color:var(--diff)}.fu.f4{background:var(--ink);color:var(--panel)}
 .fu-d{color:var(--ink3);margin-right:2px;white-space:nowrap}
 .acts.acts-n{background:var(--none-bg)}.acts.acts-n span{color:var(--ink2)}
@@ -248,6 +253,7 @@ th,th.num{white-space:normal;vertical-align:bottom;min-width:40px}th.pcell{min-w
 <div id="modal"></div><div id="dlg"></div><div id="toastBox"></div><div id="popBox"></div>
 <script>
 function startApp(D, ME, LOG) {
+['notes', 'incentives', 'landowners', 'contractors'].forEach(k => { if (!Array.isArray(D[k])) D[k] = []; });
 { const bm = document.getElementById('bootMsg'); if (bm) bm.remove(); document.getElementById('app').hidden = false; }
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -286,7 +292,7 @@ async function sendOps(ops) {
   return r;
 }
 // Records a step (hold, booking, ...) that changes several records at once: we change them here, then send every changed record.
-const TRACK = ['visits', 'clients', 'bookings', 'payments', 'expenses'];
+const TRACK = ['visits', 'clients', 'bookings', 'payments', 'expenses', 'notes', 'incentives', 'landowners'];
 function snap() {
   const s = {}; TRACK.forEach(k => { s[k] = {}; D[k].forEach(o => s[k][o.id] = JSON.stringify(o)); });
   s.plots = {}; Object.values(D.plots).forEach(p => s.plots[p.id] = JSON.stringify(p)); s.plotOwners = {...D.plotOwners}; return s;
@@ -306,6 +312,21 @@ async function commit(s, steps, okMsg, go) {
   try { await sendOps(ops); steps.forEach(f => store.flows.push({...f, user: ME.name, role: ME.role, at: new Date().toISOString()})); toast(okMsg); render(); }
   catch (e) { toast(e.message + ' Reloading…'); setTimeout(() => location.reload(), 2500); }
   finally { saving = false; }
+}
+// Saves new records of collections that snap() doesn't track (contractors, ledger, dastavej, registry).
+async function saveRecs(puts, step, msg, go, after) {
+  reindex(); if (go && location.hash !== go) location.hash = go; else render();
+  saving = true;
+  try {
+    await sendOps(puts.map(([coll, o]) => ({op: 'put', coll, id: o.id, data: o})).concat([{op: 'step', type: 'add', data: step}]));
+    store.flows.push({...step, type: 'add', user: ME.name, role: ME.role, at: new Date().toISOString()}); toast(msg); render(); if (after) after();
+  } catch (e) { toast(e.message + ' Reloading…'); setTimeout(() => location.reload(), 2500); }
+  finally { saving = false; }
+}
+// Opens the pencil of the block that shows field `coll|id|…` (used right after a new record is added).
+function openPenFor(coll, id) {
+  const el = document.querySelector(`.ed[data-e^="${CSS.escape(coll + '|' + id + '|')}"]`); if (!el) return;
+  const pen = [...document.querySelectorAll('.pen')].find(b => b._scope && b._scope.contains(el)); if (pen) pen.click();
 }
 async function checkVersion() {
   if (saving || document.hidden) return;
@@ -327,7 +348,7 @@ function reindex() {
   indexColl('visits', D.visits); indexColl('bookings', D.bookings); indexColl('payments', D.payments); indexColl('clients', D.clients);
   indexColl('plots', Object.values(D.plots)); indexColl('expenses', D.expenses); indexColl('landowners', D.landowners);
   indexColl('advances', D.advances); indexColl('incentives', D.incentives); indexColl('registry', Object.values(D.registry));
-  indexColl('dastavej', Object.values(D.dastavej)); indexColl('ledger', D.contractors.flatMap(c => c.ledger));
+  indexColl('dastavej', Object.values(D.dastavej)); indexColl('ledger', D.contractors.flatMap(c => c.ledger)); indexColl('notes', D.notes);
   if (derivedReady) rebuildDerived();
 }
 reindex();
@@ -422,17 +443,25 @@ function remarkParts(r) {
     if (m) out.fus.push({n: +m[1], date: m[2] ? `${+m[2]} ${MONTHS[+m[3] - 1] || m[3]} ${m[4]}` : null, text: m[5]}); else (out.fus.length ? out.after : out.before).push(x); });
   return out;
 }
+// The note written when the visit was registered (text before any FU) is tagged "Visit", so every remark has a tag.
+const VISIT_TAG = '<span class="fu f0">Visit</span> ';
 function remarkHtml(r, full) {
   if (!r) return '<span class="muted">—</span>';
-  const p = remarkParts(r); if (!p.fus.length) return full ? `<div class="rmk full"><div class="last">${esc(r)}</div></div>` : `<span class="muted clip">${esc(r)}</span>`;
+  const p = remarkParts(r); if (!p.fus.length) return full ? `<div class="rmk full"><div class="last">${VISIT_TAG}${esc(r)}</div></div>` : `<div class="rmk" title="${esc(r)}"><div class="last">${VISIT_TAG}${esc(r)}</div></div>`;
   if (!full) { const f = p.fus[p.fus.length - 1]; // list: only the latest follow-up; the visit page shows them all
     return `<div class="rmk" title="${esc(r)}"><div class="last"><span class="fu f${f.n}">FU${f.n}</span> ${f.date ? `<span class="fu-d">${f.date}</span> ` : ''}${esc(f.text || '—')}</div></div>`; }
   const who = n => full && n >= 3 ? ` <span class="muted">(${n === 3 ? 'Sahil Bhai' : 'Pratik Sir'})</span>` : '';
-  const lines = [...p.before.map(x => `<div>${esc(x)}</div>`),
+  const lines = [...p.before.map((x, i) => `<div>${i ? '' : VISIT_TAG}${esc(x)}</div>`),
     ...p.fus.map((f, i) => `<div${i === p.fus.length - 1 ? ' class="last"' : ''}><span class="fu f${f.n}">FU${f.n}</span> ${f.date ? `<span class="fu-d">${f.date}</span> ` : ''}${esc(f.text || '—')}${who(f.n)}</div>`),
     ...p.after.map(x => `<div class="nt">${esc(x)}</div>`)];
   return `<div class="rmk${full ? ' full' : ''}"${full ? '' : ` title="${esc(r)}"`}>${lines.join('')}</div>`;
 }
+// Follow-ups are added with "+ FU" / "+ Add follow-up": the chosen tag (FU1–FU4), date and note are added to the end
+// of the Remark as "FU2 26/11/26: note", and the visit's status becomes that Follow up.
+const lastFu = v => { const f = remarkParts(v.remark).fus; return f.length ? Math.max(...f.map(x => x.n)) : 0; };
+const nextFu = v => Math.min(4, Math.max(lastFu(v), 0) + 1);
+const fuStamp = iso => { const [y, m, d] = String(iso).split('-'); return `${d}/${m}/${String(y).slice(2)}`; };
+const addFuText = (remark, n, iso, note) => (remark ? remark + ' · ' : '') + `FU${n} ${fuStamp(iso)}: ${String(note).replace(/\s*·\s*/g, ', ').replace(/\s+/g, ' ').trim()}`;
 const fuFromRemark = v => { const m = String(v.remark || '').match(/FU([1-4])/g); return m ? Math.max(...m.map(x => +x[2])) : 1; };
 function vStatus(v) {
   const c = v.client && clientById[v.client];
@@ -476,15 +505,16 @@ const clientSize = c => { const a = clientPlots(c).map(p => D.plots[p].area).fil
 const clientFinal = c => { const conv = c.bookings.map(id => bookingById[id]).filter(b => isConvertedBooking(b) && b.finalAmount);
   if (conv.length) return conv.reduce((s, b) => s + b.finalAmount, 0);
   const deeds = clientPlots(c).map(p => D.dastavej[p]).filter(d => d && d.finalAmount); return deeds.length ? deeds.reduce((s, d) => s + d.finalAmount, 0) : null; };
-// Clients list "Remark": what the client said at the time of holding (the hold remark) or at the latest payment
-// (that payment's note), whichever is newest.
-const clientRemark = c => {
-  const cand = [];
-  c.bookings.map(id => bookingById[id]).filter(Boolean).forEach(b => { if (b.remarks && String(b.remarks).trim()) cand.push({date: b.holdDate || null, text: String(b.remarks).trim(), kind: 'At hold'}); });
-  clientPayments(c.id).filter(p => !p.virtual && p.note && String(p.note).trim()).forEach(p => cand.push({date: p.date || null, text: String(p.note).trim(), kind: 'Payment'}));
-  if (!cand.length) return null;
-  return cand.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (a.kind === 'Payment') - (b.kind === 'Payment')).pop();
+// A client's remarks: what they said when the plot was put on hold (the hold remark), plus every remark added later with
+// "+ Add remark" (payment calls, meetings, other calls). The Clients list shows the newest one.
+const NOTE_KINDS = ['Payment call', 'Call', 'Meeting / office visit', 'Other'];
+const clientNotes = c => {
+  const out = [];
+  c.bookings.map(id => bookingById[id]).filter(Boolean).forEach(b => { if (b.remarks && String(b.remarks).trim()) out.push({date: b.holdDate || null, text: String(b.remarks).trim(), kind: 'At hold', plot: b.plot, hold: b}); });
+  D.notes.filter(n => n.client === c.id && n.text).forEach(n => out.push({date: n.date || null, text: n.text, kind: n.kind || 'Call', by: n.by, note: n}));
+  return out.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || (!!a.note - !!b.note) || ((a.note || {}).sr || 0) - ((b.note || {}).sr || 0));
 };
+const clientRemark = c => { const n = clientNotes(c); return n.length ? n[n.length - 1] : null; };
 const lastHoldBooking = c => c.bookings.map(id => bookingById[id]).filter(b => b.holdDate || b.holdAmount).sort((a, b) => String(a.holdDate || '').localeCompare(String(b.holdDate || ''))).pop() || null;
 const clientDate = c => { const ds = c.bookings.map(id => bookingById[id]).flatMap(b => [b.holdDate, b.dpDate, b.bookingDate]).filter(d => d && /^\d{4}-\d\d-\d\d/.test(d)).sort(); return ds.length ? ds[ds.length - 1] : null; };
 // Booking money. Refund only applies to a lapsed hold. Down payment (DP) can come in several instalments: each one is a
@@ -564,11 +594,13 @@ function plotClass(p) {
   return ['s-none', 'Not marked', 'b-none'];
 }
 const fuStage = v => { for (let i = 4; i >= 1; i--) if (v['fu' + i + 'Date'] || v['fu' + i + 'Note']) return i; return 0; };
-const AGENTS = [...new Set([...D.visits, ...D.bookings].flatMap(x => agentsOf(x.by)))].filter(a => a !== 'Company').sort();
+// Agents = every name used on a visit, booking or incentive row, worked out fresh each time, so a new agent added on one
+// record shows up in every agent list straight away.
+const allAgents = () => [...new Set([...D.visits, ...D.bookings, ...D.incentives].flatMap(x => agentsOf(x.by)))].filter(a => a !== 'Company').sort();
 const OPTS = {
   visitStatus: ['Follow up 1', 'Follow up 2', 'Follow up 3', 'Follow up 4', 'Booked', 'Lapsed'],
-  agents: [...AGENTS, 'Company'],
-  incAgents: AGENTS.filter(a => !/pratik/i.test(a)),
+  get agents() { return [...allAgents(), 'Company']; },
+  get incAgents() { return allAgents().filter(a => !/pratik/i.test(a)); },
   outcome: ['Plot On Hold', 'Booked', 'Lapsed'],
   plotStatus: ['UNSOLD', 'HOLD', 'SOLD OUT', 'DEVELOPMENT AREA'],
   forWhat: ['Plots', 'Villas', 'Plots, Villas'],
@@ -578,7 +610,8 @@ const OPTS = {
   loan: ['Loan Availed', 'Not Availed'],
   docStatus: DOC_OPTS,
   payStatus: ['Received', 'Cheque returned'],
-  incType: ['Company', 'Personal']
+  incType: ['Company', 'Personal'],
+  noteKind: NOTE_KINDS
 };
 
 // ---------- inline editing ----------
@@ -667,6 +700,7 @@ document.addEventListener('click', e => {
   if ($('#dlg').firstChild) {
     if (t.closest('[data-dlgclose]') || t.matches('[data-dlgbg]')) { e.stopPropagation(); closeDlg(); return; }
     if (t.closest('[data-dlgok]')) { e.stopPropagation(); if (dlgSave) dlgSave(); return; }
+    const na = t.closest('[data-newag]'); if (na) { e.stopPropagation(); addAgentChip(na.parentNode.querySelector('[data-newag-in]')); return; }
     const chip = t.closest('[data-chip]'); if (chip) { e.stopPropagation(); if (chip.parentNode.hasAttribute('data-multi')) chip.classList.toggle('on'); else chip.parentNode.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', c === chip)); if (chip.parentNode.dataset.group === 'deal') dealFields(); chip.parentNode.dispatchEvent(new Event('change', {bubbles: true})); return; }
     const dg = t.closest('.dlg [data-go]'); if (dg) { e.stopPropagation(); closeDlg(); location.hash = dg.dataset.go; return; }
     const dd = t.closest('[data-dlgdel]'); if (dd) { e.stopPropagation(); const [c, i] = dd.dataset.dlgdel.split('|'); closeDlg(); deleteDlg(c, i, c === 'visits' && location.hash.startsWith('#/visit/') ? '#/visits' : null); return; }
@@ -740,6 +774,7 @@ document.addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (!$('#dlg').firstChild) return;
   if (e.key === 'Escape') { e.stopPropagation(); closeDlg(); }
+  if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-newag-in]')) { e.preventDefault(); addAgentChip(e.target); return; }
   if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.closest && e.target.closest('.dlg')) { e.preventDefault(); if (dlgSave) dlgSave(); }
 }, true);
 document.addEventListener('input', e => { if (e.target.id === 'nv_phone') visitDupHint(); });
@@ -747,7 +782,8 @@ function describe(coll, o) {
   return {visits: () => 'Visit · ' + (o.name || ''), bookings: () => 'Booking · ' + (o.client || '') + ' · plot ' + (o.plot || ''), payments: () => 'Payment · ' + (o.text || '').slice(0, 40),
     clients: () => 'Client · ' + o.name, plots: () => 'Plot ' + o.no, expenses: () => 'Expense · ' + (o.particulars || ''), landowners: () => 'Sold plot · ' + (o.owner || ''),
     advances: () => 'Advance · ' + (o.remarks || ''), incentives: () => 'Incentive · ' + (o.client || ''), registry: () => 'Registry · plot ' + o.plot,
-    dastavej: () => 'Dastavej · plot ' + o.plot, ledger: () => 'Contractor ledger · ' + (o.particular || '')}[coll]();
+    dastavej: () => 'Dastavej · plot ' + o.plot, ledger: () => 'Contractor ledger · ' + (o.particular || ''),
+    notes: () => 'Remark · ' + ((clientById[o.client] || {}).name || '') + ' · ' + String(o.text || '').slice(0, 40), contractors: () => 'Contractor · ' + (o.name || '')}[coll]();
 }
 
 // ---------- uploads (this tab only) ----------
@@ -897,7 +933,7 @@ V.visits = () => {
     {k: 'phone', label: 'Phone', nofilter: true, get: v => v.phone, cell: v => ed('visits', v, 'phone')},
     {k: 'by', label: 'Agent', get: v => v.by, multi: v => agentsOf(v.by), cell: v => ed('visits', v, 'by', 'select', 'agents')},
     {k: 'status', label: 'Status', order: VISIT_STATUSES, get: v => vStatus(v)[0], cell: v => ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${vStatus(v)[1]}">${vStatus(v)[0]}</span>`)},
-    {k: 'remark', label: 'Remark', nofilter: true, get: v => v.remark, cell: v => remarkHtml(v.remark)}
+    {k: 'remark', label: 'Remark', nofilter: true, get: v => v.remark, cell: v => `<div class="rcell">${remarkHtml(v.remark)}<button type="button" class="addq" data-fu="${esc(v.id)}" title="Add a follow-up (FU1–FU4) to this visit">+ FU</button></div>`}
   ];
   const lapsedVisits = D.visits.filter(isLapsedVisit);
   const noVisit = D.clients.filter(c => clientLapsed(c) && !D.visits.some(v => v.client === c.id)).length;
@@ -912,6 +948,53 @@ V.visits = () => {
   const t = tbl('visits', cols, rows, {rowGo: v => '#/visit/' + v.id, limit: 200, noun: 'visits', title: 'Site visits', order: (a, b) => b.sr - a.sr});
   return head + t.html;
 };
+// "+ FU" in the Site visits list / "+ Add follow-up" on the visit page.
+function followUpDlg(vid) {
+  const v = IDX.visits[vid]; if (!v) return;
+  const s = vStatus(v)[0], c = v.client && clientById[v.client];
+  const fixed = (c && !clientLapsed(c)) || s === 'Booked'; // status follows the client folder / a Booked visit keeps Booked
+  const n0 = nextFu(v), last = lastFu(v);
+  const chips = [1, 2, 3, 4].map(n => `<button type="button" class="chip${n === n0 ? ' on' : ''}" data-chip="${n}">${esc(FU_LABEL[n])}</button>`).join('');
+  openDlg('Add follow-up', esc((v.name || 'Visit') + (v.phone ? ' · ' + v.phone : '') + ' · now ' + s), `
+    <label>Follow-up <span class="muted">(${last ? 'last one was FU' + last : 'no follow-up yet'})</span><div class="chips" data-group="fu">${chips}</div></label>
+    <label>Date<input type="date" id="fu_date" value="${today()}" style="max-width:220px"></label>
+    <label>What did the client say? *<textarea id="fu_note" rows="3" placeholder="e.g. Will come with family on Sunday · Wants corner plot · Call after Diwali"></textarea></label>
+    ${fixed ? `<p class="muted" style="margin:0;font-size:12.5px">Status stays <b>${esc(s)}</b>${c ? ': it follows the client folder' : ''}.</p>`
+      : `<label>Status after this call<select id="fu_status"><option value="fu">Follow up (same number as the tag)</option><option value="Lapsed">Lapsed (not interested)</option></select></label>`}
+    ${v.remark ? `<div class="muted" style="font-size:12.5px">Remark so far:</div>${remarkHtml(v.remark, true)}` : ''}`, 'Save follow-up', () => {
+    const n = +(chipVals('fu')[0] || 0), date = $('#fu_date').value, note = $('#fu_note').value.trim();
+    const err = m => { $('#dlg_err').textContent = m; };
+    if (!n) return err('Choose FU1, FU2, FU3 or FU4.');
+    if (!date) return err('Enter the date of the call.');
+    if (!note) return err('Write what the client said.');
+    const remark = addFuText(v.remark, n, date, note); const label = describe('visits', v);
+    const ch = [['remark', remark]];
+    if (!fixed) { const st = $('#fu_status').value === 'Lapsed' ? 'Lapsed' : 'Follow up ' + n; if (st !== s) ch.push(['status', st]); }
+    const btn = $('[data-dlgok]'); btn.disabled = true; btn.textContent = 'Saving…';
+    sendOps(ch.map(([f, val]) => ({op: 'patch', coll: 'visits', id: v.id, field: f, value: val, label})))
+      .then(() => { ch.forEach(([f, val]) => { setF('visits', v, f, val); editedSet.add('visits|' + v.id + '|' + f); }); closeDlg(); render(); toast('FU' + n + ' saved for ' + (v.name || 'the visit')); })
+      .catch(e => { btn.disabled = false; btn.textContent = 'Save follow-up'; err(e.message); });
+  });
+  const ta = $('#fu_note'); if (ta) ta.focus();
+}
+// "+ Add remark" in a client folder / "+ Remark" in the Clients list: what the client said on a payment call, a meeting…
+function noteDlg(cid) {
+  const c = clientById[cid]; if (!c) return;
+  const st = clientStatus(c)[0]; const last = clientRemark(c);
+  openDlg('Add remark', esc(c.name + (c.phone ? ' · ' + c.phone : '') + ' · ' + st), `
+    <div class="g2"><label>Type<select id="nt_kind">${NOTE_KINDS.map(k => `<option${k === (st === 'Booked' ? 'Payment call' : 'Call') ? ' selected' : ''}>${esc(k)}</option>`).join('')}</select></label>
+    <label>Date<input type="date" id="nt_date" value="${today()}"></label></div>
+    <label>What did the client say? *<textarea id="nt_text" rows="3" placeholder="e.g. Will pay ₹2 lakh by 10 Dec · Loan file sent to bank · Wants to visit the site again"></textarea></label>
+    ${last ? `<div class="muted" style="font-size:12.5px">Latest remark (${esc(last.kind)}${last.date ? ', ' + fd(last.date) : ''}): ${esc(last.text)}</div>` : ''}`, 'Save remark', () => {
+    const text = $('#nt_text').value.replace(/\s+/g, ' ').trim(), date = $('#nt_date').value;
+    if (!text) { $('#dlg_err').textContent = 'Write what the client said.'; return; }
+    if (!date) { $('#dlg_err').textContent = 'Enter the date.'; return; }
+    const n = {id: 'NT' + stamp() + Math.random().toString(36).slice(2, 5), client: c.id, date, kind: $('#nt_kind').value, text, by: ME.name, at: new Date().toISOString(), row: 0, sr: maxSr(D.notes) + 1};
+    const sn = snap(); D.notes.push(n); closeDlg();
+    commit(sn, [{type: 'add', what: 'Remark added', cid: c.id, label: n.kind + ': ' + text.slice(0, 60)}], 'Remark saved for ' + c.name);
+  });
+  $('#nt_text').focus();
+}
 const openAddVisit = () => {
   const today = new Date().toISOString().slice(0, 10);
   const chips = (name, list, on) => `<div class="chips" data-group="${name}">${list.map(x => `<button type="button" class="chip${x === on ? ' on' : ''}" data-chip="${esc(x)}">${esc(x)}</button>`).join('')}</div>`;
@@ -931,7 +1014,14 @@ const openAddVisit = () => {
   <label>Remark<textarea id="nv_remark" rows="3" placeholder="Anything about the visit: people, budget, plots liked, what to talk about next…"></textarea></label>`, 'Save visit', () => saveNew('visit'), true);
 };
 const agentChips = (on, group = 'agents') => { const sel = new Set(agentsOf(on)); const list = [...new Set([...OPTS.agents, ...sel])];
-  return `<div class="chips" data-group="${group}" data-multi>${list.map(a => `<button type="button" class="chip${sel.has(a) ? ' on' : ''}" data-chip="${esc(a)}">${esc(a)}</button>`).join('')}</div>`; };
+  return `<div class="chips" data-group="${group}" data-multi>${list.map(a => `<button type="button" class="chip${sel.has(a) ? ' on' : ''}" data-chip="${esc(a)}">${esc(a)}</button>`).join('')}<span class="newag"><input data-newag-in placeholder="New agent's name" maxlength="40"><button type="button" class="btn small" data-newag>+ Add agent</button></span></div>`; };
+// A new agent (a new hire) is typed once here; after the record is saved the name is in every agent list.
+function addAgentChip(inp) {
+  const name = inp.value.replace(/[,&/]/g, ' ').replace(/\s+/g, ' ').trim(); if (!name) { inp.focus(); return; }
+  const box = inp.closest('.chips'); const have = [...box.querySelectorAll('[data-chip]')].find(c => c.dataset.chip.toLowerCase() === name.toLowerCase());
+  if (have) have.classList.add('on'); else inp.closest('.newag').insertAdjacentHTML('beforebegin', `<button type="button" class="chip on" data-chip="${esc(name)}">${esc(name)}</button>`);
+  inp.value = '';
+}
 const chipVals = group => [...document.querySelectorAll(`#dlg .chips[data-group="${group}"] .chip.on`)].map(c => c.dataset.chip);
 const freePlots = () => Object.values(D.plots).filter(p => plotClass(p)[1] === 'Unsold').sort((a, b) => a.sr - b.sr);
 const modeSel = (idn, on) => `<select id="${idn}" data-mode>${OPTS.payMode.map(m => `<option ${m === on ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
@@ -1096,7 +1186,7 @@ V.visit = id => {
   const s = vStatus(v); const c = v.client && clientById[v.client];
   const others = v.phone ? D.visits.filter(x => x.phone === v.phone && x.id !== v.id) : []; const vsr = visitSrs();
   return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
-  <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">${visitSrLabel(v, vsr)}</p>
+  <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn" data-fu="${esc(v.id)}">+ Add follow-up</button><button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">${visitSrLabel(v, vsr)}</p>
   <div class="split"><div>
   <div class="card"><h2>Visit <span class="src">${v.added ? 'added in the CRM' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark', 'text', '', remarkHtml(v.remark, true))]])}</div>
   ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
@@ -1116,9 +1206,11 @@ V.clients = () => {
     {k: 'agent', label: 'Agent', get: c => (bookingById[c.bookings[0]] || {}).by, multi: c => [...new Set(c.bookings.flatMap(id => agentsOf(bookingById[id].by)))]},
     {k: 'status', label: 'Status', order: ['Booked', 'On hold', 'Lapsed'], get: c => clientStatus(c)[0], cell: c => `<span class="badge ${clientStatus(c)[1]}">${clientStatus(c)[0]}</span>`},
     {k: 'doc', label: 'Document status', order: DOC_OPTS, get: c => c.docStatus, cell: c => ed('clients', c, 'docStatus', 'select', 'docStatus')},
-    {k: 'remark', label: 'Remark', nofilter: true, get: c => (clientRemark(c) || {}).text || null, cell: c => { const r = clientRemark(c); return r ? `<span class="clamp2" title="${esc(r.text)}">${esc(r.text)}</span><div class="muted" style="font-size:11.5px">${r.kind}${r.date ? ' · ' + fd(r.date) : ''}</div>` : '<span class="muted">—</span>'; }},
     {k: 'final', label: 'Final amount', type: 'money', nofilter: true, totalIf: c => clientStatus(c)[0] === 'Booked', get: clientFinal},
-    {k: 'paid', label: 'Paid till now', type: 'money', nofilter: true, get: c => clientPaid(c) || null}
+    {k: 'paid', label: 'Paid till now', type: 'money', nofilter: true, get: c => clientPaid(c) || null},
+    {k: 'remark', label: 'Remark', nofilter: true, get: c => (clientRemark(c) || {}).text || null, cell: c => { const r = clientRemark(c);
+      const add = `<button type="button" class="addq" data-note="${esc(c.id)}" title="Add what the client said on a call">+ Remark</button>`;
+      return r ? `<span class="clamp2" title="${esc(r.text)}">${esc(r.text)}</span><div class="rcell" style="margin-top:2px;flex-wrap:wrap;gap:2px 8px;max-width:170px"><span class="muted" style="font-size:11.5px">${esc(r.kind)}${r.date ? ' · ' + fd(r.date) : ''}</span>${add}</div>` : `<div class="rcell"><span class="muted">—</span>${add}</div>`; }}
   ];
   const grp = c => { const s = clientStatus(c)[0]; return s === 'On hold' || s === 'Lapsed' ? s : 'Booked'; };
   const G = ['Booked', 'On hold', 'Lapsed']; const n = Object.fromEntries(G.map(g => [g, D.clients.filter(c => grp(c) === g).length]));
@@ -1176,15 +1268,15 @@ V.client = id => {
     // right side, under MOU: refund and loan
     const rl = b ? `<div class="psub">Refund and loan</div>${kv3([['Refund', refund(b)], ['Refund amount', rf(b, 'refundAmount', 'money')], ['Refund mode', rf(b, 'refundMode', 'select', 'payMode')],
         ['Loan', ed('bookings', b, 'loan', 'select', 'loan') + (/avail/i.test(b.loan || '') && !/not/i.test(b.loan || '') || b.loanBank ? `<div style="font-weight:400;font-size:12.5px;margin-top:2px"><span class="muted">Bank: </span>${ed('bookings', b, 'loanBank')}</div>` : '')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')]])}` : '';
-    const mou = b || d ? `<div class="psub">MOU and dastavej</div>${kv3([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}` : '';
+    const mou = b || d ? `<div class="psub">MOU and dastavej</div>${kv3([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}${!d && b && isConvertedBooking(b) && owned.includes(p) ? `<button class="btn small" style="margin:-4px 0 10px" data-mkrec="dastavej|${esc(p)}|${esc(id)}">+ Add dastavej details</button>` : ''}` : '';
     return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : hold ? 'b-hold' : 'b-lapsed'}">${val(outcomeLabel(b))}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
     ${hold ? `<div class="acts"><span>This plot is on hold since ${fd(b.holdDate)}.${dpEntries(b).length ? ' DP paid: ' + inr(dpTotal(b)) + '.' : ''}</span><button class="btn primary small" data-flow="book" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Booked</button>${canLapse(c, b) ? `<button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Lapsed</button>` : ''}</div>` : ''}
     ${b && isConvertedBooking(b) ? (canLapse(c, b) ? `<div class="acts acts-n"><span>Booked. The client can still back out until the MOU is done.</span>${ROLE() !== 'Agent' ? `<button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Lapsed</button>` : '<span class="muted" style="flex:none">Only Admin or Super admin can lapse a booked plot.</span>'}</div>`
       : `<p class="muted" style="font-size:12.5px;margin:-4px 0 10px">Can no longer be lapsed: ${docLock(c, b)}.</p>`) : ''}
     ${b && isLapsedBooking(b) && b.lapsedOn ? `<p class="muted" style="font-size:12.5px;margin:-4px 0 10px">Lapsed on ${fd(b.lapsedOn)}${b.lapseReason ? ' · ' + esc(b.lapseReason) : ''}.</p>` : ''}
     <div class="pcols"><div>${hb}</div><div>${mou}${rl}</div></div>
-    ${r ? `<div class="psub">Registry and maintenance</div>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance deposit', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')], ['Maintenance cheque', b ? ed('bookings', b, 'maintenanceCheque') : '—']])}` : ''}
-    ${b && (b.remarks || b.paymentRemarks || b.dastavejRemarks) ? `<p class="muted" style="margin:12px 0 0">${esc([b.remarks, b.paymentRemarks, b.dastavejRemarks].filter(Boolean).join(' · '))}</p>` : ''}</div>`; };
+    ${r ? `<div class="psub">Registry and maintenance</div>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance deposit', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')], ['Maintenance cheque', b ? ed('bookings', b, 'maintenanceCheque') : '—']])}` : b && isConvertedBooking(b) && owned.includes(p) ? `<div class="psub">Registry and maintenance</div><button class="btn small" data-mkrec="registry|${esc(p)}|${esc(id)}">+ Add registry &amp; maintenance</button>` : ''}
+    ${b && (b.paymentRemarks || b.dastavejRemarks) ? `<p class="muted" style="margin:12px 0 0">${esc([b.paymentRemarks, b.dastavejRemarks].filter(Boolean).join(' · '))}</p>` : ''}</div>`; };
   const payT = shownPays.length ? tbl('pay-' + c.id + '-' + sel, [
       {k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date, cell: p => p.virtual ? fd(p.date) : ed('payments', p, 'date', 'date')},
       {k: 'text', label: 'Entry', get: p => p.text, cell: p => p.virtual ? `<i>${esc(p.text)}</i>` : ed('payments', p, 'text')}, {k: 'mode', label: 'Mode', get: p => normMode(p.mode), cell: p => p.virtual ? val(normMode(p.mode)) : ed('payments', p, 'mode', 'select', 'payMode', val(normMode(p.mode))) + `<span hidden data-own-label>${DETAIL_FIELDS.map(f => ed('payments', p, f)).join('')}</span>`},
@@ -1209,7 +1301,14 @@ V.client = id => {
   ${ret.length ? `<div class="note">${ret.length} returned cheque${ret.length > 1 ? 's' : ''} (${inr(ret.reduce((a, p) => a + (p.amount || 0), 0))}) not counted in Paid till now.</div>` : ''}
   ${(() => { // "How this folder was put together" is background info: a closed line at the bottom, opened with a click
     const src = c.links.length ? `<details class="srcinfo"><summary>How this folder was put together <span class="muted">(${c.links.length} source${c.links.length > 1 ? 's' : ''})</span></summary>${c.links.map(l => `<div>${val(l.name)} <span class="muted">· ${esc(l.source)}${l.plot ? ' · plot ' + esc(l.plot) : ''} · ${esc(l.how)}</span></div>`).join('')}</details>` : '';
-    const main = `${shownPlots.map(plotCard).join('')}<div class="row" style="justify-content:space-between;align-items:center;margin:6px 0 8px"><h2 style="font-size:15px;margin:0">Payments${sel !== 'all' ? ' for plot ' + esc(sel) : ''}</h2><button class="btn primary small" data-flow="pay" data-cid="${esc(id)}">+ Add payment</button></div>${payT}${src}`;
+    const notes = clientNotes(c).reverse();
+    const notesT = notes.length ? tbl('notes-' + c.id, [
+      {k: 'date', label: 'Date', type: 'date', get: n => n.date, cell: n => n.note ? ed('notes', n.note, 'date', 'date') : ed('bookings', n.hold, 'holdDate', 'date')},
+      {k: 'kind', label: 'Type', get: n => n.kind, cell: n => n.note ? ed('notes', n.note, 'kind', 'select', 'noteKind') : `<span class="badge b-hold">At hold</span>${n.plot ? ' <span class="muted">plot ' + esc(n.plot) + '</span>' : ''}`},
+      {k: 'text', label: 'What the client said', nofilter: true, get: n => n.text, cell: n => n.note ? ed('notes', n.note, 'text') : ed('bookings', n.hold, 'remarks')},
+      {k: 'by', label: 'Added by', get: n => n.by || null}], notes, {noun: 'remarks'}).html : '<p class="muted" style="margin:0 0 6px">No remarks yet. After each payment call, add what the client said.</p>';
+    const remarksBlock = `<div class="row" style="justify-content:space-between;align-items:center;margin:6px 0 8px"><h2 style="font-size:15px;margin:0">Remarks</h2><button class="btn small" data-note="${esc(id)}">+ Add remark</button></div>${notesT}`;
+    const main = `${shownPlots.map(plotCard).join('')}${remarksBlock}<div class="row" style="justify-content:space-between;align-items:center;margin:14px 0 8px"><h2 style="font-size:15px;margin:0">Payments${sel !== 'all' ? ' for plot ' + esc(sel) : ''}</h2><button class="btn primary small" data-flow="pay" data-cid="${esc(id)}">+ Add payment</button></div>${payT}${src}`;
     const side = dropzone(id, 'Documents') + (vs.length ? `<div class="card"><h2>Site visits</h2>${vs.map(x => `<div style="padding:4px 0"><a data-go="#/visit/${x.id}" style="cursor:pointer;color:var(--accent)">${visitSrLabel(x, vsr)} · ${fd(x.date)}</a> <span class="muted">· ${esc(x.by || '')}</span></div>`).join('')}</div>` : '');
     return side ? `<div class="split"><div>${main}</div><div>${side}</div></div>` : `<div>${main}</div>`; })()}`;
 };
@@ -1245,9 +1344,9 @@ V.plot = no => {
   ${D.plots[no] ? `<div class="card"><h2>Plot <span class="src">Plot List sheet</span></h2>${kv([['Status', ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${pc[2]}">${pc[1]}</span>`)], ['Area (sq yd)', ed('plots', p, 'area', 'number')], ['Note', ed('plots', p, 'note')]])}</div>` : ''}
   ${owner ? `<div class="card"><h2>Client</h2><a class="folder" data-go="#/client/${owner.id}">${ico('users')}<div><b>${esc(owner.name)}</b><span>${esc(owner.phone || '')} · open client folder</span></div></a></div>` : ''}
   <div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Holds and bookings <span class="src">Booking list</span></h2>${bks.length ? `<table><thead><tr><th class="sr">Sr.</th><th>Client</th><th>Hold date</th><th>Outcome</th><th class="num">Finalised</th><th class="num">Down payment</th></tr></thead><tbody>${bks.map(b => `<tr class="click" data-go="#/client/${D.clients.find(c => c.bookings.includes(b.id)).id}"><td class="sr">${b.sr}</td><td>${val(b.client)}</td><td>${ed('bookings', b, 'holdDate', 'date')}</td><td>${ed('bookings', b, 'outcome', 'select', 'outcome', val(outcomeLabel(b)))}</td><td class="num">${ed('bookings', b, 'finalAmount', 'money')}</td><td class="num">${ed('bookings', b, 'dpAmount', 'money')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="padding:0 10px">None.</p>'}</div>
-  ${d ? `<div class="card"><h2>Dastavej <span class="src">Dastavej sheet</span></h2>${kv([['Name on dastavej', ed('dastavej', d, 'client')], ['Date', ed('dastavej', d, 'date', 'date')], ['Financial year', ed('dastavej', d, 'fy')], ['Finalised amount', ed('dastavej', d, 'finalAmount', 'money')], ['Status', ed('dastavej', d, 'status')], ['Type', ed('dastavej', d, 'kind')]])}</div>` : ''}
-  ${r ? `<div class="card"><h2>Registry & maintenance <span class="src">Registry sheet</span></h2>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')]])}</div>` : ''}
-  ${l ? `<div class="card"><h2>Sold plot register <span class="src">Sr. ${l.sr}</span></h2>${kv([['Owner', ed('landowners', l, 'owner')], ['Sq yard', ed('landowners', l, 'sqYard', 'number')], ['Total sale value', ed('landowners', l, 'saleValue', 'money')], ['Anjanee paid', ed('landowners', l, 'anjaneePaid', 'money')]])}</div>` : ''}
+  ${d ? `<div class="card"><h2>Dastavej <span class="src">Dastavej sheet</span></h2>${kv([['Name on dastavej', ed('dastavej', d, 'client')], ['Date', ed('dastavej', d, 'date', 'date')], ['Financial year', ed('dastavej', d, 'fy')], ['Finalised amount', ed('dastavej', d, 'finalAmount', 'money')], ['Status', ed('dastavej', d, 'status')], ['Type', ed('dastavej', d, 'kind')]])}</div>` : pc[1] === 'Sold' && owner ? `<div class="card"><h2>Dastavej</h2><button class="btn small" data-mkrec="dastavej|${esc(no)}|${esc(owner.id)}">+ Add dastavej details</button></div>` : ''}
+  ${r ? `<div class="card"><h2>Registry & maintenance <span class="src">Registry sheet</span></h2>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')]])}</div>` : pc[1] === 'Sold' && owner ? `<div class="card"><h2>Registry & maintenance</h2><button class="btn small" data-mkrec="registry|${esc(no)}|${esc(owner.id)}">+ Add registry &amp; maintenance</button></div>` : ''}
+  ${l ? `<div class="card"><h2>Sold plot register <span class="src">Sr. ${l.sr}</span></h2>${kv([['Owner', ed('landowners', l, 'owner')], ['Sq yard', ed('landowners', l, 'sqYard', 'number')], ['Total sale value', ed('landowners', l, 'saleValue', 'money')], ['Anjanee paid', ed('landowners', l, 'anjaneePaid', 'money')]])}</div>` : pc[1] === 'Sold' ? `<div class="card"><h2>Sold plot register</h2><button class="btn small" data-reg="${esc(no)}">+ Add to register</button></div>` : ''}
   ${pays.length ? `<div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Payments mentioning this plot</h2><table><tbody>${pays.map(x => `<tr><td class="sr">${x.sr}</td><td>${ed('payments', x, 'date', 'date')}</td><td>${ed('payments', x, 'text')}</td><td>${ed('payments', x, 'status', 'select', 'payStatus', payBadge(x))}</td><td class="num">${amtCell(x, ed('payments', x, 'amount', 'money'))}</td></tr>`).join('')}</tbody></table></div>` : ''}
   </div><div>${dropzone('plot/' + no, 'Plot papers')}</div></div>`;
 };
@@ -1269,27 +1368,29 @@ V.landowners = () => {
     {k: 'client', label: 'Client folder', get: r => r.c ? r.c.name : null, cell: r => r.c ? `<a data-go="#/client/${r.c.id}" style="color:var(--accent);cursor:pointer">${esc(r.c.name)}</a>` : '<span class="muted">—</span>'},
     {k: 'sq', label: 'Sq yd', type: 'num', get: r => r.l && r.l.sqYard != null ? r.l.sqYard : r.p ? r.p.area : null},
     {k: 'final', label: 'Final amount', type: 'money', get: r => r.b ? r.b.finalAmount : null},
-    {k: 'sale', label: 'Total sale value', type: 'money', get: r => r.l ? r.l.saleValue : null, cell: r => r.l ? ed('landowners', r.l, 'saleValue', 'money') : '<span class="muted">—</span>'},
+    {k: 'sale', label: 'Total sale value', type: 'money', get: r => r.l ? r.l.saleValue : null, cell: r => r.l ? ed('landowners', r.l, 'saleValue', 'money') : `<button type="button" class="addq" data-reg="${esc(r.no)}" title="Add this plot to the Dastavej register">+ Add to register</button>`},
     {k: 'paid', label: 'Paid (register)', type: 'money', get: r => r.l ? r.l.anjaneePaid : null, cell: r => r.l ? ed('landowners', r.l, 'anjaneePaid', 'money') : '<span class="muted">—</span>'},
     {k: 'reg', label: 'Dastavej register', get: r => r.l ? 'In register' : 'Not in register'}
   ], shown, {rowGo: r => '#/plot/' + encodeURIComponent(r.no), totals: ['final', 'sale', 'paid'], noun: 'sold plots', title: 'Sold plots'});
   const chip = (k, label, n) => `<span class="chip${(pick || '') === k ? ' on' : ''}" data-lv="soldReg" data-val="${k}">${label} <span class="muted">${n}</span></span>`;
-  return crumbs([['Files'], ['Sold plots']]) + `<h1>Sold plots</h1><p class="sub">Every sold plot: the plots that are Sold in Plots, plus any plot in the "DASTAVEJ PAYMENT" register. Sale value and Paid (register) come from that register.</p>
+  return crumbs([['Files'], ['Sold plots']]) + `<h1>Sold plots</h1><p class="sub">Every sold plot: the plots that are Sold in Plots, plus any plot in the "DASTAVEJ PAYMENT" register. Sale value and Paid (register) come from that register; use <b>+ Add to register</b> for a newly sold plot.</p>
   <div class="row" style="gap:6px;margin:-4px 0 14px">${chip('', 'All sold plots', rows.length)}${chip('in', 'In Dastavej register', inReg)}${chip('out', 'Not in register', rows.length - inReg)}</div>
   <div class="split"><div>${t.html}</div><div>${dropzone('landowners', 'Sold plot documents')}</div></div>`;
 };
 V.partner = () => {
   const L = D.landowners.filter(x => x.anjaneePaid != null || x.anjaneeRemaining != null);
   const t = tbl('partner', [{k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'plot', label: 'Plot', get: x => x.plot}, {k: 'owner', label: 'Owner', get: x => x.owner},
+    {k: 'last', label: 'Last payment', type: 'date', get: x => (x.anjaneePays || []).length ? x.anjaneePays[x.anjaneePays.length - 1].date : null,
+      cell: x => (x.anjaneePays || []).length ? `<span title="${esc(x.anjaneePays.map(p => p.date + ' · ' + inr(p.amount) + (p.mode ? ' · ' + p.mode : '') + (p.note ? ' · ' + p.note : '')).join('\n'))}">${fd(x.anjaneePays[x.anjaneePays.length - 1].date)} <span class="muted">(${x.anjaneePays.length})</span></span>` : '<span class="muted">—</span>'},
     {k: 'paid', label: 'Paid', type: 'money', get: x => x.anjaneePaid, cell: x => ed('landowners', x, 'anjaneePaid', 'money')}], L, {rowGo: x => '#/plot/' + encodeURIComponent(x.plot), totals: ['paid'], noun: 'plots', order: (a, b) => a.sr - b.sr});
   const paid = t.shown.reduce((a, x) => a + (x.anjaneePaid || 0), 0);
-  return crumbs([['Files'], ['Land partner – Anjanee Infraspace']]) + `<h1>Land partner – Anjanee Infraspace</h1><p class="sub">Settlement per plot, from the Anjanee Infraspace columns in the Sold plots sheet.</p>
+  return crumbs([['Files'], ['Land partner – Anjanee Infraspace']]) + `<div class="row" style="justify-content:space-between"><h1>Land partner – Anjanee Infraspace</h1><button class="btn primary" data-anjpay>+ Add payment to Anjanee</button></div><p class="sub">Settlement per plot: the Anjanee Infraspace columns of the old Sold plots sheet plus payments added here. Hover "Last payment" to see each payment.</p>
   <div class="stats"><div class="stat"><small>Paid</small><div>${inr(paid)}</div></div><div class="stat"><small>Plots</small><div>${t.shown.length}</div></div></div>
   <div class="split"><div>${t.html}</div><div>${dropzone('partner', 'Agreements & settlement papers')}</div></div>`;
 };
 
 // ---------- Contractors ----------
-V.contractors = () => crumbs([['Files'], ['Contractors']]) + `<h1>Contractors</h1><p class="sub">One folder and ledger per contractor.</p>` + tbl('contractors', [
+V.contractors = () => crumbs([['Files'], ['Contractors']]) + `<div class="row" style="justify-content:space-between"><h1>Contractors</h1><button class="btn primary" data-addcon>+ Add contractor</button></div><p class="sub">One folder and ledger per contractor. Open a contractor to add a payment to their ledger.</p>` + tbl('contractors', [
   {k: 'sr', label: 'Sr.', type: 'num', get: c => D.contractors.indexOf(c) + 1}, {k: 'name', label: 'Contractor', get: c => c.name, cell: c => `<b>${esc(c.name)}</b>`},
   {k: 'n', label: 'Ledger entries', type: 'num', get: c => c.ledger.length}, {k: 'lt', label: 'Ledger total', type: 'money', get: c => c.ledger.reduce((a, x) => a + (x.amount || 0), 0)},
   {k: 'et', label: 'Tagged site expenses', type: 'money', get: c => c.expenses.reduce((a, x) => a + (x.amount || 0), 0)}], D.contractors, {rowGo: c => '#/contractor/' + encodeURIComponent(c.name), totals: ['lt', 'et'], noun: 'contractors'}).html;
@@ -1297,19 +1398,21 @@ V.contractor = name => {
   const c = D.contractors.find(x => x.name === name); if (!c) return '<p>Not found.</p>';
   const l = tbl('ledger-' + name, [{k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'date', label: 'Date', type: 'date', get: x => x.date, cell: x => ed('ledger', x, 'date', 'date')},
     {k: 'part', label: 'Particular', get: x => x.particular, cell: x => ed('ledger', x, 'particular')}, {k: 'rem', label: 'Remarks', get: x => x.remarks, cell: x => ed('ledger', x, 'remarks')},
-    {k: 'amt', label: 'Amount', type: 'money', get: x => x.amount, cell: x => ed('ledger', x, 'amount', 'money')}], c.ledger, {totals: ['amt'], noun: 'entries'});
+    {k: 'method', label: 'Paid by', get: x => x.method || null, cell: x => ed('ledger', x, 'method', 'select', 'method')},
+    {k: 'amt', label: 'Amount', type: 'money', get: x => x.amount, cell: x => ed('ledger', x, 'amount', 'money')}], c.ledger, {totals: ['amt'], noun: 'entries', order: (a, b) => String(a.date || '').localeCompare(String(b.date || '')) || a.sr - b.sr});
   const e = tbl('cexp-' + name, [{k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'date', label: 'Date', type: 'date', get: x => x.date, cell: x => ed('expenses', x, 'date', 'date')},
     {k: 'part', label: 'Particulars', get: x => x.particulars, cell: x => ed('expenses', x, 'particulars')}, {k: 'for', label: 'For', get: x => expFor(x), cell: x => ed('expenses', x, 'for', 'select', 'forWhat')},
     {k: 'amt', label: 'Amount', type: 'money', get: x => x.amount, cell: x => ed('expenses', x, 'amount', 'money')}], c.expenses, {totals: ['amt'], noun: 'expenses'});
-  return crumbs([['Files'], ['Contractors', '#/contractors'], [name]]) + `<h1>${esc(name)}</h1><p class="sub">Payments from the Sold plots sheet, plus site expenses tagged with this name. The two lists may contain the same payment twice.</p>
-  <div class="split"><div><h2 style="font-size:15px;margin:0 0 8px">Ledger</h2>${l.html}<h2 style="font-size:15px;margin:18px 0 8px">Site expenses</h2>${e.html}</div><div>${dropzone('contractor/' + name, 'Bills & payment proofs')}</div></div>`;
+  return crumbs([['Files'], ['Contractors', '#/contractors'], [name]]) + `<h1>${esc(name)}</h1><p class="sub">Ledger = payments made to this contractor (old sheet + added here). Site expenses = expenses tagged with this contractor. An old sheet payment can be in both lists.</p>
+  <div class="split"><div><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="font-size:15px;margin:0">Ledger</h2><button class="btn primary small" data-ledger="${esc(name)}">+ Add payment</button></div>${l.html}<h2 style="font-size:15px;margin:18px 0 8px">Site expenses</h2>${e.html}</div><div>${dropzone('contractor/' + name, 'Bills & payment proofs')}</div></div>`;
 };
 
 // ---------- Site expenses ----------
 const CONTRACTOR_TAGS = /khod|anil|arun|nikunj|mohmmad|mohammad|mohamand|mahesh/i;
 const expTags = e => (e.type || '').split(',').map(s => s.trim()).filter(Boolean);
-const expCats = e => { const c = expTags(e).filter(t => !CONTRACTOR_TAGS.test(t)).map(t => t.replace(/conytractor/i, 'Contractor')); return c.length ? c : []; };
-const expWho = e => expTags(e).filter(t => CONTRACTOR_TAGS.test(t));
+const isConTag = t => CONTRACTOR_TAGS.test(t) || D.contractors.some(c => c.name.toLowerCase() === t.toLowerCase());
+const expCats = e => { const c = expTags(e).filter(t => !isConTag(t)).map(t => t.replace(/conytractor/i, 'Contractor')); return c.length ? c : []; };
+const expWho = e => expTags(e).filter(isConTag);
 const expFor = e => { const f = (e.for || '').toLowerCase(); return f.includes('plot') && f.includes('villa') ? 'Both' : f.includes('villa') ? 'Villas' : f.includes('plot') ? 'Plots' : null; };
 const expMethod = e => { const m = (e.method || '').toLowerCase(); return m === 'cash' ? 'Cash' : m === 'online' ? 'Online' : m ? e.method : null; };
 V.expenses = () => {
@@ -1325,21 +1428,122 @@ V.expenses = () => {
   const S = t.shown, sum = a => a.reduce((s, e) => s + (e.amount || 0), 0);
   const byCat = {}; S.forEach(e => { const c = expCats(e); const k = c.length > 1 ? 'Several types' : c[0] || 'Not categorised'; byCat[k] = (byCat[k] || 0) + (e.amount || 0); });
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]); const max = cats.length ? cats[0][1] : 1;
-  return crumbs([['Files'], ['Site expenses']]) + `<div class="row" style="justify-content:space-between"><h1>Site expenses</h1><button class="btn primary" data-add="expense">+ Add expense</button></div><p class="sub">Every row of the Nal Village expense sheet. Totals and the chart follow the column filters.</p>
+  return crumbs([['Files'], ['Site expenses']]) + `<div class="row" style="justify-content:space-between"><h1>Site expenses</h1><button class="btn primary" data-add="expense">+ Add expense</button></div><p class="sub">Every site expense: the old Nal Village expense sheet plus everything added here. Totals and the chart follow the column filters.</p>
   ${showAdd === 'expense' ? addExpenseForm() : ''}
   <div class="stats"><div class="stat"><small>Total shown</small><div>${inr(sum(S))}</div></div><div class="stat"><small>Plots</small><div>${inr(sum(S.filter(e => expFor(e) === 'Plots')))}</div></div><div class="stat"><small>Villas</small><div>${inr(sum(S.filter(e => expFor(e) === 'Villas')))}</div></div><div class="stat"><small>Entries</small><div>${S.length}</div></div></div>
   <div class="card"><h2>By type of expense</h2><div class="bars">${cats.map(([k, v]) => `<div class="bar" style="cursor:default"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${(v / max * 100).toFixed(1)}%"></div></div><span class="num" style="text-align:right">${inr(v)}</span></div>`).join('')}</div></div>
   ${t.html}${dropzone('expenses', 'Expense bills')}`;
 };
+const landReg = no => D.landowners.find(x => String(x.plot) === String(no));
+function newRegRec(no) {
+  const c = plotOwner[no] ? clientById[plotOwner[no]] : null, b = (plotBk[no] || {}).conv;
+  return {id: 'LR' + stamp() + Math.random().toString(36).slice(2, 4), row: 0, plot: String(no), owner: c ? c.name : null, sqYard: D.plots[no] ? D.plots[no].area : null, saleValue: b ? b.finalAmount ?? null : null, anjaneePaid: null, sr: maxSr(D.landowners) + 1, added: true};
+}
+// Sold plots → "+ Add to register": the plot's Dastavej register line (owner, size, sale value, paid to Anjanee).
+function registerDlg(no) {
+  if (landReg(no)) return toast('Plot ' + no + ' is already in the register.');
+  const x = newRegRec(no);
+  openDlg('Add plot ' + esc(no) + ' to the Dastavej register', 'Filled in from the client folder; change anything that is different.', `<div class="g2">
+    <label>Owner<input id="nr_owner" value="${esc(x.owner || '')}"></label><label>Sq yard<input id="nr_sq" type="number" step="any" value="${x.sqYard ?? ''}"></label>
+    <label>Total sale value (₹)<input id="nr_sale" ${AMT_ATTR} value="${x.saleValue ?? ''}"></label><label>Paid to Anjanee so far (₹)<input id="nr_paid" ${AMT_ATTR}></label></div>`, 'Add to register', () => {
+    const nv = i => $(i).value === '' ? null : Number($(i).value);
+    Object.assign(x, {owner: $('#nr_owner').value.trim() || null, sqYard: nv('#nr_sq'), saleValue: nv('#nr_sale'), anjaneePaid: nv('#nr_paid')});
+    const sn = snap(); D.landowners.push(x); closeDlg(); commit(sn, [{type: 'add', what: 'Added to Dastavej register', label: 'Plot ' + no + (x.owner ? ' · ' + x.owner : '')}], 'Plot ' + no + ' added to the register');
+  });
+}
+// Land partner → "+ Add payment to Anjanee": adds to the plot's "Anjanee paid" and keeps each payment in a list.
+function anjaneeDlg() {
+  const reg = landByPlot();
+  const nos = [...new Set([...Object.values(D.plots).filter(p => plotClass(p)[1] === 'Sold').map(p => p.no), ...Object.keys(reg)])].sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+  openDlg('Add payment to Anjanee Infraspace', 'Adds to the plot\'s "Anjanee paid" total. A sold plot not yet in the register is added to it.', `
+    <label>Plot *<select id="na_plot"><option value="">Choose a sold plot</option>${nos.map(n => { const l = reg[n]; return `<option value="${esc(n)}">Plot ${esc(n)}${l && l.owner ? ' · ' + esc(l.owner) : ''}${l && l.anjaneePaid ? ' · paid ' + esc(inr(l.anjaneePaid)) : ''}</option>`; }).join('')}</select></label>
+    <div class="g2"><label>Date *<input type="date" id="na_date" value="${today()}"></label><label>Amount (₹) *<input id="na_amt" ${AMT_ATTR}></label>
+    <label>Mode${modeSel('na_mode', 'NEFT')}</label><label>Note<input id="na_note"></label></div>`, 'Save payment', () => {
+    const no = $('#na_plot').value, amt = Number($('#na_amt').value), date = $('#na_date').value; const err = m => { $('#dlg_err').textContent = m; };
+    if (!no) return err('Choose the plot.'); if (!date) return err('Enter the date.'); if (!amt) return err('Enter the amount.');
+    const sn = snap(); let x = landReg(no); if (!x) { x = newRegRec(no); D.landowners.push(x); }
+    x.anjaneePaid = (x.anjaneePaid || 0) + amt;
+    x.anjaneePays = [...(x.anjaneePays || []), {date, amount: amt, mode: $('#na_mode').value, ...modeVals('na_mode'), note: $('#na_note').value.trim() || null, by: ME.name}];
+    closeDlg(); commit(sn, [{type: 'add', what: 'Payment to Anjanee', label: 'Plot ' + no, amount: amt}], inr(amt) + ' to Anjanee saved for plot ' + no);
+  });
+}
+// "+ Add dastavej details" / "+ Add registry & maintenance" for a plot booked in the CRM (the old sheets only had these
+// for older plots): makes the empty record, then opens its pencil to fill it in.
+function mkDocRec(kind, no, cid) {
+  if (!['dastavej', 'registry'].includes(kind)) return;
+  if (D[kind][no]) return openPenFor(kind, no);
+  const c = clientById[cid] || (plotOwner[no] && clientById[plotOwner[no]]), b = (plotBk[no] || {}).conv;
+  const o = kind === 'dastavej'
+    ? {id: String(no), plot: String(no), client: c ? c.name : null, date: null, fy: null, finalAmount: b ? b.finalAmount ?? null : null, onlineCheque: null, cash: null, status: null, kind: 'SALE', trpl: D.plots[no] && D.plots[no].trpl || null, added: true}
+    : {id: String(no), plot: String(no), client: c ? c.name : null, vakilAmount: null, vakilDate: null, vakilMode: null, maintenanceAmount: null, maintenanceDate: null, maintenanceMode: null, added: true};
+  D[kind][no] = o;
+  saveRecs([[kind, o]], {what: kind === 'dastavej' ? 'Dastavej details added' : 'Registry & maintenance added', label: 'Plot ' + no, cid: c ? c.id : null}, 'Added for plot ' + no + '. Fill in the details.', null, () => openPenFor(kind, no));
+}
+function contractorDlg() {
+  openDlg('Add contractor', 'A new contractor gets their own folder and ledger, and shows in the Contractor box of new site expenses.', `<label>Name *<input id="nc_name" maxlength="60" placeholder="e.g. Ramesh Bhai"></label>`, 'Add contractor', () => {
+    const name = $('#nc_name').value.replace(/[,|]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!name) { $('#dlg_err').textContent = 'Enter the contractor name.'; return; }
+    if (D.contractors.some(c => c.name.toLowerCase() === name.toLowerCase())) { $('#dlg_err').textContent = 'This contractor is already in the list.'; return; }
+    const c = {id: 'C' + stamp(), name, expenseRows: [], added: true};
+    const rec = {...c}; c.ledger = []; c.expenses = []; D.contractors.push(c); closeDlg();
+    saveRecs([['contractors', rec]], {what: 'Contractor added', label: name}, name + ' added', '#/contractor/' + encodeURIComponent(name));
+  });
+}
+function ledgerDlg(name) {
+  const c = D.contractors.find(x => x.name === name); if (!c) return;
+  openDlg('Add payment to ' + esc(name), 'Goes in this contractor\'s ledger.', `
+    <div class="g2"><label>Date *<input type="date" id="nl_date" value="${today()}"></label><label>Amount (₹) *<input id="nl_amt" ${AMT_ATTR}></label>
+    <label>Particular *<input id="nl_part" placeholder="e.g. JCB payment, Labour week 3"></label><label>Paid by<select id="nl_method">${OPTS.method.map(x => `<option>${x}</option>`).join('')}</select></label></div>
+    <label>Remarks<input id="nl_rem"></label>`, 'Save payment', () => {
+    const amt = Number($('#nl_amt').value), part = $('#nl_part').value.trim(), date = $('#nl_date').value; const err = m => { $('#dlg_err').textContent = m; };
+    if (!date) return err('Enter the date.'); if (!amt) return err('Enter the amount.'); if (!part) return err('Enter what the payment was for.');
+    const l = {id: 'LG' + stamp(), contractor: c.name, date, particular: part, amount: amt, method: $('#nl_method').value, remarks: $('#nl_rem').value.trim() || null, row: 0, added: true, sr: maxSr(c.ledger) + 1};
+    c.ledger.push(l); closeDlg();
+    saveRecs([['ledger', l]], {what: 'Contractor payment added', label: c.name + ' · ' + part, amount: amt}, 'Payment saved in ' + c.name + '\'s ledger');
+  });
+}
 const addExpenseForm = () => `<div class="card"><h2>New site expense</h2><div class="addform">
   <label>Date<input type="date" id="ne_date" value="${new Date().toISOString().slice(0, 10)}"></label><label>Particulars<input id="ne_part"></label>
   <label>For<select id="ne_for">${OPTS.forWhat.map(x => `<option>${x}</option>`).join('')}</select></label>
   <label>Type<select id="ne_type">${['Material Exp', 'Labour Exp', 'Machinery Exp', 'Sub Contractor Pay', 'Electricity Exp', 'Diesel & Petrol Exp', 'Water Exp', 'Plumbing Exp', 'Site Sillak', 'LandOwner Advance Pay', 'Other'].map(x => `<option>${x}</option>`).join('')}</select></label>
   <label>Contractor<select id="ne_con"><option value="">None</option>${D.contractors.map(c => `<option>${esc(c.name)}</option>`).join('')}</select></label>
   <label>Amount (₹)<input id="ne_amt" type="text" inputmode="numeric" class="amt" autocomplete="off"></label><label>Paid by<select id="ne_method">${OPTS.method.map(x => `<option>${x}</option>`).join('')}</select></label>
+  <label>Remarks<input id="ne_rem"></label>
   <div class="row"><button class="btn primary" data-save="expense">Save expense</button><button class="btn" data-add="">Cancel</button></div></div><div class="err" id="ne_err"></div></div>`;
 
 // ---------- Incentives ----------
+// Same formula as the Incentive Calculation sheet: Final = Slab × (rate ÷ ₹5,750) × (size ÷ 200) − Advance,
+// where rate = Sold at ÷ size. Worked out live, so editing Slab / Size / Sold at / Advance updates Final.
+const STD_RATE = 5750;
+const incRawRate = x => x.sellAmount && x.size ? x.sellAmount / x.size : x.actualRate ?? null;
+const incRate = x => { const r = incRawRate(x); return r == null ? null : Math.round(r * 100) / 100; };
+const incFinal = x => { const r = incRawRate(x); return x.slab != null && r && x.size ? Math.round((x.slab * r / (x.standardRate || STD_RATE) * x.size / 200 - (x.advance || 0)) * 100) / 100 : x.final ?? null; };
+// Booked plots with no incentive row, from the day the Incentive Calculation sheet starts (older bookings keep the
+// incentive columns of the booking list, shown under "By agent").
+const incFrom = () => D.incentives.map(x => x.bookingDate).filter(Boolean).sort()[0] || '';
+const incMissing = () => { const from = incFrom(); return D.bookings.filter(b => isConvertedBooking(b) && b.plot && String(b.bookingDate || b.holdDate || '') >= from && !D.incentives.some(x => String(x.plot) === String(b.plot)) && !/pratik/i.test(b.by || '')); };
+function incentiveDlg() {
+  const bks = incMissing().sort((a, b) => String(b.bookingDate || b.holdDate || '').localeCompare(String(a.bookingDate || a.holdDate || '')));
+  openDlg('Add incentive', 'Pick the booking. Agent, client, plot, size and price are filled in from it; Final is worked out as in the sheet.', `
+    <label>Booking *<select id="ni_bk"><option value="">Choose a booked plot</option>${bks.map(b => `<option value="${esc(b.id)}">Plot ${esc(b.plot)} · ${esc(b.client || '')} · ${esc(b.by || 'no agent')}${b.bookingDate ? ' · ' + esc(b.bookingDate) : ''}</option>`).join('')}</select></label>
+    <div class="g2"><label>Agent *<select id="ni_by"><option value="">—</option>${OPTS.incAgents.map(a => `<option>${esc(a)}</option>`).join('')}</select></label><label>Type<select id="ni_type">${OPTS.incType.map(x => `<option>${x}</option>`).join('')}</select></label>
+    <label>Size (sq yd)<input id="ni_size" type="number" step="any"></label><label>Sold at (₹)<input id="ni_sell" ${AMT_ATTR}></label>
+    <label>Slab (₹) *<input id="ni_slab" ${AMT_ATTR} placeholder="e.g. 30000"></label><label>Advance already given (₹)<input id="ni_adv" ${AMT_ATTR}></label></div>
+    <div id="ni_sum" class="note" style="margin:0"></div>`, 'Save incentive', () => {
+    const b = bookingById[$('#ni_bk').value]; const err = m => { $('#dlg_err').textContent = m; }; const nv = i => $(i).value === '' ? null : Number($(i).value);
+    if (!b) return err('Choose the booking.'); if (!$('#ni_by').value) return err('Choose the agent.'); if (nv('#ni_slab') == null) return err('Enter the slab amount.');
+    const x = {id: 'IN' + stamp(), row: 0, by: $('#ni_by').value, client: b.client, plot: b.plot, bookingDate: b.bookingDate || b.holdDate || null, size: nv('#ni_size'), sellAmount: nv('#ni_sell'),
+      standardRate: STD_RATE, type: $('#ni_type').value, slab: nv('#ni_slab'), advance: nv('#ni_adv') || 0, pending: null, sr: maxSr(D.incentives) + 1, added: true};
+    x.actualRate = incRate(x); x.final = incFinal(x); x.pending = x.final;
+    const sn = snap(); D.incentives.push(x); closeDlg(); commit(sn, [{type: 'add', what: 'Incentive added', label: x.by + ' · plot ' + x.plot, amount: x.final}], 'Incentive saved for ' + x.by);
+  }, true);
+  const sum = () => { const x = {size: +$('#ni_size').value || null, sellAmount: +$('#ni_sell').value || null, slab: $('#ni_slab').value === '' ? null : +$('#ni_slab').value, advance: +$('#ni_adv').value || 0};
+    const r = incRate(x), f = incFinal(x); $('#ni_sum').innerHTML = r ? `Rate ${inr(r)} /sq yd${f != null ? ` · <b>Final incentive ${inr(f)}</b>` : ' · enter the slab'}` : 'Choose a booking.'; };
+  $('#ni_bk').addEventListener('change', () => { const b = bookingById[$('#ni_bk').value]; if (!b) return sum();
+    const ag = agentsOf(b.by).find(a => OPTS.incAgents.includes(a)); $('#ni_by').value = ag || '';
+    $('#ni_size').value = D.plots[b.plot] && D.plots[b.plot].area || ''; $('#ni_sell').value = b.finalAmount || ''; document.querySelectorAll('#dlg .amt').forEach(amtHint); sum(); });
+  $('#dlg').addEventListener('input', sum); sum();
+}
 V.incentives = () => {
   const t = tbl('incentives', [
     {k: 'sr', label: 'Sr.', type: 'num', get: x => x.sr}, {k: 'by', label: 'Agent', get: x => x.by, multi: x => agentsOf(x.by), cell: x => ed('incentives', x, 'by', 'select', 'incAgents')},
@@ -1347,18 +1551,20 @@ V.incentives = () => {
     {k: 'date', label: 'Booked', type: 'date', get: x => x.bookingDate, cell: x => ed('incentives', x, 'bookingDate', 'date')},
     {k: 'size', label: 'Size', type: 'num', get: x => x.size, cell: x => ed('incentives', x, 'size', 'number')},
     {k: 'sell', label: 'Sold at', type: 'money', get: x => x.sellAmount, cell: x => ed('incentives', x, 'sellAmount', 'money')},
-    {k: 'rate', label: 'Rate /sq yd', type: 'money', get: x => x.actualRate},
+    {k: 'rate', label: 'Rate /sq yd', type: 'money', get: incRate},
     {k: 'type', label: 'Type', get: x => x.type, cell: x => ed('incentives', x, 'type', 'select', 'incType')},
     {k: 'slab', label: 'Slab', type: 'money', get: x => x.slab, cell: x => ed('incentives', x, 'slab', 'money')},
     {k: 'adv', label: 'Advance', type: 'money', get: x => x.advance, cell: x => ed('incentives', x, 'advance', 'money')},
-    {k: 'final', label: 'Final', type: 'money', get: x => x.final, cell: x => `<b>${ed('incentives', x, 'final', 'money')}</b>`},
+    {k: 'final', label: 'Final', type: 'money', get: incFinal, cell: x => `<b title="Slab × (rate ÷ ₹5,750) × (size ÷ 200) − advance">${inr(incFinal(x))}</b>`},
     {k: 'pend', label: 'Pending', type: 'money', get: x => x.pending, cell: x => ed('incentives', x, 'pending', 'money')}], D.incentives, {totals: ['final', 'pend'], noun: 'rows'});
   const bk = D.bookings.filter(b => b.incentiveStatus || b.incentiveReleased || b.incentivePending);
   const agents = {}; bk.filter(b => !/pratik/i.test(b.by || '')).forEach(b => { const a = b.by || 'Not marked'; const g = agents[a] = agents[a] || {name: a, n: 0, rel: 0, pend: 0}; g.n++; g.rel += b.incentiveReleased || 0; g.pend += b.incentivePending || 0; });
   const a = tbl('incentive-agents', [{k: 'sr', label: 'Sr.', type: 'num', get: g => Object.values(agents).indexOf(g) + 1}, {k: 'name', label: 'Agent', get: g => g.name},
     {k: 'n', label: 'Bookings', type: 'num', get: g => g.n}, {k: 'rel', label: 'Released', type: 'money', get: g => g.rel}, {k: 'pend', label: 'Pending', type: 'money', get: g => g.pend}],
     Object.values(agents).sort((x, y) => y.n - x.n), {totals: ['rel', 'pend'], noun: 'agents'});
-  return crumbs([['Files'], ['Incentives']]) + `<h1>Incentives</h1><p class="sub">From the Incentive Calculation sheet and the incentive columns of the booking list. Standard rate ₹5,750 /sq yd.</p>
+  const miss = incMissing().length;
+  return crumbs([['Files'], ['Incentives']]) + `<div class="row" style="justify-content:space-between"><h1>Incentives</h1><button class="btn primary" data-addinc>+ Add incentive</button></div><p class="sub">Standard rate ₹5,750 /sq yd. Final = Slab × (rate ÷ 5,750) × (size ÷ 200) − Advance, worked out automatically.</p>
+  ${miss ? `<div class="note">${miss} plot${miss > 1 ? 's' : ''} booked since ${fd(incFrom())} ${miss > 1 ? 'have' : 'has'} no incentive row yet. Use <b>+ Add incentive</b> to add ${miss > 1 ? 'them' : 'it'}.</div>` : ''}
   <h2 style="font-size:15px;margin:0 0 8px">Calculation</h2>${t.html}<h2 style="font-size:15px;margin:18px 0 8px">By agent (booking list)</h2>${a.html}`;
 };
 
@@ -1371,8 +1577,8 @@ V.history = () => {
     {k: 'user', label: 'By', get: e => e.user, cell: e => `${esc(e.user || '')} <span class="muted">· ${esc(e.role || '')}</span>`}, {k: 'label', label: 'Record', get: e => e.label}, {k: 'field', label: 'Field', get: e => FIELD_LABEL(e.field)},
     {k: 'old', label: 'From', get: e => e.old == null ? null : String(e.old)}, {k: 'new', label: 'To', get: e => e.new == null ? null : String(e.new), cell: e => `<b>${val(e.new)}</b>`},
     {k: 'act', label: '', nofilter: true, get: () => null, cell: e => (e.coll === 'visits' && /^(fu\d|extra|followups)/.test(e.field)) ? '<span class="muted">field removed</span>' : e.undoOf ? '<span class="muted">undo</span>' : e.undone ? '<span class="muted">undone</span>' : `<button class="btn small" data-undo="${e.i}">Undo</button>`}], E, {noun: 'changes', order: (a, b) => b.sr - a.sr});
-  const FL = {hold: 'Hold taken', book: 'Plot booked', pay: 'Payment added', lapse: 'Hold lapsed', visit: 'Site visit added', expense: 'Expense added'};
-  const steps = store.flows.length ? `<h2 style="font-size:15px;margin:22px 0 8px">Holds, bookings and payments</h2><div class="card" style="padding:6px 14px">${[...store.flows].reverse().map(f => { const c = clientById[f.cid]; const b = f.bid && bookingById[f.bid]; return `<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px"><b>${FL[f.type]}</b> · ${f.type === 'visit' ? esc(f.name || '') : f.type === 'expense' ? esc(f.particulars || '') : ''}${c ? `<a data-go="#/client/${c.id}" style="cursor:pointer;color:var(--accent)">${esc(c.name)}</a>` : ''}${b || f.plot ? ' · plot ' + esc((b && b.plot) || f.plot) : ''}${f.amount ? ' · ' + inr(f.amount) : ''}${f.final ? ' · final ' + inr(f.final) : ''} <span class="muted">· ${esc(f.user || '')} (${esc(f.role)}) · ${new Date(f.at).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</span></div>`; }).join('')}</div>` : '';
+  const FL = {hold: 'Hold taken', book: 'Plot booked', pay: 'Payment added', lapse: 'Hold lapsed', visit: 'Site visit added', expense: 'Expense added', delete: 'Deleted'};
+  const steps = store.flows.length ? `<h2 style="font-size:15px;margin:22px 0 8px">Holds, bookings and payments</h2><div class="card" style="padding:6px 14px">${[...store.flows].reverse().map(f => { const c = clientById[f.cid]; const b = f.bid && bookingById[f.bid]; return `<div style="padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px"><b>${FL[f.type] || esc(f.what || f.type)}</b> · ${f.type === 'visit' ? esc(f.name || '') : f.type === 'expense' ? esc(f.particulars || '') : f.type === 'add' || f.type === 'delete' ? esc(f.label || '') + (f.type === 'add' && clientById[f.cid] ? ' · ' : '') : ''}${c ? `<a data-go="#/client/${c.id}" style="cursor:pointer;color:var(--accent)">${esc(c.name)}</a>` : ''}${b || f.plot ? ' · plot ' + esc((b && b.plot) || f.plot) : ''}${f.amount ? ' · ' + inr(f.amount) : ''}${f.final ? ' · final ' + inr(f.final) : ''} <span class="muted">· ${esc(f.user || '')} (${esc(f.role)}) · ${new Date(f.at).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}</span></div>`; }).join('')}</div>` : '';
   return crumbs([['Admin'], ['Edit history']]) + `<h1>Edit history</h1><p class="sub">Every change, who made it and when.</p>${t.html}${steps}`;
 };
 
@@ -1479,7 +1685,7 @@ function exportAll() {
 }
 
 // ---------- Delete (Super admin) and Deleted items ----------
-const DELETABLE = ['visits', 'clients', 'bookings', 'payments', 'expenses', 'landowners', 'advances', 'incentives', 'registry', 'dastavej', 'ledger'];
+const DELETABLE = ['visits', 'clients', 'bookings', 'payments', 'expenses', 'landowners', 'advances', 'incentives', 'registry', 'dastavej', 'ledger', 'notes'];
 const canDelete = () => ME.role === 'Super admin';
 function snapAll() {
   const s = snap();
@@ -1491,7 +1697,7 @@ function snapAll() {
 function removedOps(s) {
   const ops = [];
   const have = {visits: D.visits, clients: D.clients, bookings: D.bookings, payments: D.payments, expenses: D.expenses, landowners: D.landowners, advances: D.advances, incentives: D.incentives,
-    registry: Object.values(D.registry), dastavej: Object.values(D.dastavej), ledger: D.contractors.flatMap(c => c.ledger)};
+    registry: Object.values(D.registry), dastavej: Object.values(D.dastavej), ledger: D.contractors.flatMap(c => c.ledger), notes: D.notes};
   Object.entries(have).forEach(([k, arr]) => { const ids = new Set(arr.map(o => o.id)); Object.keys(s[k] || {}).forEach(id => { if (!ids.has(id)) ops.push({op: 'del', coll: k, id}); }); });
   Object.keys(s.plotOwners).forEach(k => { if (!(k in D.plotOwners)) ops.push({op: 'del', coll: 'plotOwners', id: k}); });
   return ops;
@@ -1504,6 +1710,7 @@ function cascadeDelete(coll, o) {
     D.payments.filter(p => p.clients.includes(o.id)).forEach(p => { if (p.clients.length === 1) drop(D.payments, p.id); else p.clients = p.clients.filter(x => x !== o.id); });
     Object.keys(D.plotOwners).forEach(k => { if (D.plotOwners[k] === o.id) delete D.plotOwners[k]; });
     D.visits.forEach(v => { if (v.client === o.id) v.client = null; });
+    D.notes.filter(n => n.client === o.id).forEach(n => drop(D.notes, n.id));
     drop(D.clients, o.id);
   } else if (coll === 'bookings') {
     if (/hold/i.test(o.outcome || '')) freeHeldPlot(o);
@@ -1685,6 +1892,14 @@ document.addEventListener('click', e => {
   const cs = t.closest('[data-csel]'); if (cs) { clientSel[cs.dataset.cid] = cs.dataset.csel; render(); return; }
   const pv = t.closest('[data-pv]'); if (pv) { plotView.mode = pv.dataset.pv; render(); return; }
   if (t.closest('[data-addvisit]')) { openAddVisit(); return; }
+  if (t.closest('[data-addcon]')) { contractorDlg(); return; }
+  if (t.closest('[data-addinc]')) { incentiveDlg(); return; }
+  const rg = t.closest('[data-reg]'); if (rg) { e.preventDefault(); registerDlg(rg.dataset.reg); return; }
+  if (t.closest('[data-anjpay]')) { anjaneeDlg(); return; }
+  const mr = t.closest('[data-mkrec]'); if (mr) { const [k, pn, cid] = mr.dataset.mkrec.split('|'); mkDocRec(k, pn, cid); return; }
+  const lg = t.closest('[data-ledger]'); if (lg) { ledgerDlg(lg.dataset.ledger); return; }
+  const fu = t.closest('[data-fu]'); if (fu) { e.preventDefault(); followUpDlg(fu.dataset.fu); return; }
+  const nt = t.closest('[data-note]'); if (nt) { e.preventDefault(); noteDlg(nt.dataset.note); return; }
   const add = t.closest('[data-add]'); if (add) { showAdd = add.dataset.add || null; render(); return; }
   const sv = t.closest('[data-save]'); if (sv) { saveNew(sv.dataset.save); return; }
   const un = t.closest('[data-undo]'); if (un) { undo(+un.dataset.undo); return; }
@@ -1732,7 +1947,7 @@ function saveNew(kind) {
     if (deal !== 'none') {
       const s = stamp(); const match = phone ? D.clients.find(x => x.phone === phone) : null;
       const h = {type: 'hold', at: new Date().toISOString(), role: ROLE(), vid: v.id, cid: match ? match.id : 'CN' + s, csr: match ? match.sr : maxSr(D.clients) + 1, name: match ? match.name : name, phone: phone || null,
-        bid: 'BN' + s, bsr: maxSr(D.bookings) + 1, pid: 'PH' + s, psr: maxSr(D.payments) + 1, plot, amount: deal === 'hold' ? dv.hamt : null, date: v.date, mode: dv.hmode, det: dv.hdet, by: v.by, visitDate: v.date, note: null};
+        bid: 'BN' + s, bsr: maxSr(D.bookings) + 1, pid: 'PH' + s, psr: maxSr(D.payments) + 1, plot, amount: deal === 'hold' ? dv.hamt : null, date: v.date, mode: dv.hmode, det: dv.hdet, by: v.by, visitDate: v.date, note: v.remark};
       const sn = snap(); D.visits.unshift(v); reindex();
       const steps = [{type: 'visit', vid: v.id, name: v.name, phone: v.phone}, h];
       applyFlow(h);
@@ -1747,7 +1962,7 @@ function saveNew(kind) {
     if (!part) { $('#ne_err').textContent = 'Enter what the expense was for.'; return; }
     if (!amt) { $('#ne_err').textContent = 'Enter the amount.'; return; }
     const con = $('#ne_con').value; const type = $('#ne_type').value + (con ? ', ' + con : '');
-    const e = {id: 'E' + Date.now(), added: true, row: 0, date: $('#ne_date').value || null, particulars: part, for: $('#ne_for').value, type, amount: amt, method: $('#ne_method').value, remarks: null, contractor: con || null, sr: maxSr(D.expenses) + 1};
+    const e = {id: 'E' + Date.now(), added: true, row: 0, date: $('#ne_date').value || null, particulars: part, for: $('#ne_for').value, type, amount: amt, method: $('#ne_method').value, remarks: $('#ne_rem').value.trim() || null, contractor: con || null, sr: maxSr(D.expenses) + 1};
     const sn = snap(); D.expenses.push(e); if (con) { const c = D.contractors.find(x => x.name === con); if (c) c.expenses.push(e); }
     showAdd = null; commit(sn, [{type: 'expense', eid: e.id, particulars: part, amount: amt}], 'Expense saved'); return;
   }

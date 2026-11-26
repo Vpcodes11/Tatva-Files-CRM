@@ -5,7 +5,7 @@ const ROLES = ['Agent', 'Admin', 'Super admin'];
 const SESSION_DAYS = 30;
 const MAX_FAILED = 8;          // failed logins before a 15-minute lock
 const COLLS = new Set(['visits', 'clients', 'bookings', 'payments', 'plots', 'expenses', 'landowners', 'advances',
-  'incentives', 'registry', 'dastavej', 'ledger', 'contractors', 'plotOwners']);
+  'incentives', 'registry', 'dastavej', 'ledger', 'contractors', 'plotOwners', 'notes']);
 
 // ---------- database tables (created automatically the first time) ----------
 const SCHEMA = [
@@ -274,7 +274,7 @@ async function apiData(env) {
     env.DB.prepare("SELECT value FROM meta WHERE key = 'version'")
   ]);
   const D = {visits: [], clients: [], bookings: [], payments: [], expenses: [], landowners: [], advances: [], incentives: [],
-    contractors: [], plots: {}, registry: {}, dastavej: {}, plotOwners: {}, summary: {}};
+    contractors: [], notes: [], plots: {}, registry: {}, dastavej: {}, plotOwners: {}, summary: {}};
   const ledger = [];
   for (const r of recs.results) {
     const o = JSON.parse(r.data);
@@ -285,7 +285,7 @@ async function apiData(env) {
     else if (D[r.coll]) D[r.coll][r.id] = o;
   }
   const byRow = (a, b) => (a.row || 0) - (b.row || 0) || (a.sr || 0) - (b.sr || 0);
-  ['visits', 'bookings', 'payments', 'expenses', 'landowners', 'advances', 'incentives'].forEach(k => D[k].sort(byRow));
+  ['visits', 'bookings', 'payments', 'expenses', 'landowners', 'advances', 'incentives', 'notes'].forEach(k => D[k].sort(byRow));
   D.clients.sort((a, b) => (a.sr || 0) - (b.sr || 0));
   D.contractors.forEach(c => { c.ledger = ledger.filter(l => l.contractor === c.name).sort(byRow); });
   return json({
@@ -393,7 +393,7 @@ async function apiOps(env, req, user) {
         .bind(op.grp, op.coll, op.id, 'deleted', JSON.stringify(cur), String(op.label || '').slice(0, 300), user.id, user.name));
       stmts.push(env.DB.prepare('DELETE FROM records WHERE coll = ? AND id = ?').bind(op.coll, op.id));
     } else if (op.op === 'step') {
-      if (!['hold', 'book', 'pay', 'lapse', 'visit', 'expense', 'delete'].includes(op.type)) return fail(400, 'Unknown step.');
+      if (!['hold', 'book', 'pay', 'lapse', 'visit', 'expense', 'delete', 'add'].includes(op.type)) return fail(400, 'Unknown step.');
       stmts.push(env.DB.prepare('INSERT INTO steps (type, data, user_id, user_name, role) VALUES (?,?,?,?,?)')
         .bind(op.type, JSON.stringify(op.data || {}), user.id, user.name, user.role));
     } else return fail(400, 'Unknown change.');

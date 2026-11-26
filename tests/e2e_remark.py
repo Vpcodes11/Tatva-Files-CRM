@@ -42,5 +42,5 @@ with sync_playwright() as p:
 
     # a visit with a plain remark still shows the text
     pv = q("D.visits.find(v => v.remark && !/FU\\d/.test(v.remark)).id"); go(f'#/visit/{pv}')
-    ok(q(f"document.querySelector('#view .rmk.full').innerText") == q(f"IDX.visits['{pv}'].remark"), 'plain remark shown as written')
+    ok(q(f"document.querySelector('#view .rmk.full').innerText") == 'Visit ' + q(f"IDX.visits['{pv}'].remark"), 'plain remark shown as written, tagged "Visit"')
     print('ERRORS', errs)
