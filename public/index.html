@@ -136,7 +136,7 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .dlg .warn{background:var(--hold-bg);color:var(--hold);border-radius:8px;padding:8px 10px;font-size:12.5px}
 .dlg .warn a{color:inherit;font-weight:650;cursor:pointer;text-decoration:underline}
 @media(max-width:560px){.dlg .g2{grid-template-columns:1fr}}
-.ed.edited{box-shadow:inset 0 -2px 0 #e9c46a}
+
 .ed input,.ed select{font-size:13px;padding:3px 6px;border:1.5px solid var(--accent);border-radius:6px;min-width:110px;max-width:100%;background:#fff}
 .lock{font-size:11px;margin-left:4px;color:var(--lapsed)}
 .folders{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px}
@@ -182,6 +182,7 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--hold-bg);border-radius:8px;padding:8px 10px;margin:0 0 12px;font-size:13px}.acts span{flex:1;min-width:160px;color:var(--hold)}
 .note{font-size:12.5px;color:var(--ink2);background:var(--accent-bg);border-radius:8px;padding:9px 12px;margin-bottom:14px}
 .split{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:16px;align-items:start}
+.split>div:empty{display:none}.split:has(>div:empty){grid-template-columns:minmax(0,1fr)}
 .bars{display:grid;gap:7px}.bar{display:grid;grid-template-columns:170px 1fr 110px;gap:10px;align-items:center;font-size:13px;cursor:pointer}
 .bar .track{height:10px;background:var(--bg);border-radius:5px;overflow:hidden}.bar .fill{height:100%;background:var(--accent);border-radius:5px}
 .bar.on{font-weight:650}.bar.on .fill{background:var(--ink)}
@@ -210,6 +211,15 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .plist label{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer}.plist label span:first-of-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px}
 .pfoot{justify-content:flex-end;padding:8px 12px 2px;gap:8px}
 @media (max-width:900px){.app{grid-template-columns:1fr}aside{position:static;height:auto}.split{grid-template-columns:1fr}main{padding:14px}}
+/* screen sizes: headers may wrap, tighter cells on smaller screens, a shadow shows when a table scrolls sideways */
+th,th.num{white-space:normal;vertical-align:bottom;min-width:40px}th.pcell{min-width:0}
+.tscroll{background:linear-gradient(to right,var(--panel) 30%,rgba(255,255,255,0)) left/30px 100% no-repeat local,linear-gradient(to left,var(--panel) 30%,rgba(255,255,255,0)) right/30px 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgba(0,0,0,.12),rgba(0,0,0,0)) left/10px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgba(0,0,0,.12),rgba(0,0,0,0)) right/10px 100% no-repeat scroll}
+@media (max-width:1400px){td,th{padding:6px 5px}table{font-size:12.5px}main{padding:18px 18px 60px}}
+@media (max-width:1280px){.app{grid-template-columns:200px 1fr}}
+@media (max-width:900px){.app{grid-template-columns:1fr}aside{padding:10px 10px 6px;border-right:none;border-bottom:1px solid var(--line)}
+  .nav{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}.nav .navlabel{display:none}.nav a{white-space:nowrap;flex:none;padding:6px 10px}
+  h1{font-size:22px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}.kv,.grid2{grid-template-columns:1fr 1fr!important}}
+@media (max-width:480px){.kv,.grid2{grid-template-columns:1fr!important}td,th{padding:6px 5px}.tmeta .exp{float:none;display:block;margin-top:4px}}
 </style>
 </head>
 <body>
@@ -400,7 +410,7 @@ function visitSrs() {
   [...D.visits].sort((a, b) => (a.sr || 0) - (b.sr || 0)).forEach(v => { const k = isLapsedVisit(v) ? 1 : 0; m.set(v.id, ++n[k]); });
   return m;
 }
-const visitSrLabel = (v, m = visitSrs()) => (isLapsedVisit(v) ? 'Lapsed Sr. ' : 'Follow up Sr. ') + (m.get(v.id) || '—');
+const visitSrLabel = (v, m = visitSrs()) => 'Sr. ' + (m.get(v.id) || '—') + (isLapsedVisit(v) ? ' in the Lapsed list' : ' in the Site visits list');
 // The Remark holds the old follow-up notes as "FU1 21/07/26: note · FU2: note · …". remarkHtml() shows each follow-up
 // on its own line (FU label, short date, note), with plain notes before and after, on the visit page. The Site visits
 // list shows only the latest follow-up (full remark on hover). The saved text is not changed.
@@ -1078,7 +1088,7 @@ V.visit = id => {
   return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
   <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">${visitSrLabel(v, vsr)}</p>
   <div class="split"><div>
-  <div class="card"><h2>Visit <span class="src">${v.added ? 'added in this browser' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark', 'text', '', remarkHtml(v.remark, true))]])}</div>
+  <div class="card"><h2>Visit <span class="src">${v.added ? 'added in the CRM' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark', 'text', '', remarkHtml(v.remark, true))]])}</div>
   ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
   ${others.length ? `<div class="card"><h2>Other visits by this number</h2>${others.map(o => `<div style="padding:4px 0"><a data-go="#/visit/${o.id}" style="cursor:pointer;color:var(--accent)">${visitSrLabel(o, vsr)} · ${fd(o.date)}</a> <span class="muted">· ${esc(vStatus(o)[0])} · ${esc(o.by || '')}</span></div>`).join('')}</div>` : ''}
   </div><div>${dropzone('visit/' + v.id, 'Visit photos & slips')}</div></div>`;
@@ -1641,6 +1651,7 @@ function render() {
   renderNav(nav);
   const active = document.activeElement; const restore = active && active.dataset && active.dataset.f ? [active.dataset.f, active.selectionStart] : null;
   $('#view').innerHTML = html; addPencils($('#view'));
+  $('#view').querySelectorAll('table').forEach(tb => { if (tb.closest('.tscroll, .dpop')) return; const w = document.createElement('div'); w.className = 'tscroll'; tb.parentNode.insertBefore(w, tb); w.appendChild(tb); });
   if (restore) { const el = document.querySelector(`[data-f="${restore[0]}"]`); if (el) { el.focus(); try { el.setSelectionRange(restore[1], restore[1]); } catch (x) {} } }
 }
 document.addEventListener('click', e => {

@@ -43,7 +43,7 @@ with sync_playwright() as p:
     set_status(fu, 'Lapsed'); reload(); tab(True)
     ok(q(f"vStatus(IDX.visits['{fu}'])[0]") == 'Lapsed' and in_tab(fu, 'visits-lapsed') and nav() == n0 - 1, 'Follow up visit set to Lapsed → in Lapsed tab, menu count down by 1')
     ok(series_ok(False)[0] and series_ok(True) == (True, nl0 + 1), 'after the move both tabs are still numbered 1, 2, 3 … without gaps')
-    go(f'#/visit/{fu}'); ok(q("document.querySelector('#view .sub').innerText").startswith('Lapsed Sr. '), 'visit page shows its Lapsed Sr.: %s' % q("document.querySelector('#view .sub').innerText"))
+    go(f'#/visit/{fu}'); ok(q("document.querySelector('#view .sub').innerText").endswith('in the Lapsed list'), 'visit page shows its Lapsed Sr.: %s' % q("document.querySelector('#view .sub').innerText"))
     tab(False); ok(not in_tab(fu, 'visits'), '… and no longer in Follow up')
     set_status(fu, 'Follow up 2'); reload(); tab(False)
     ok(q(f"vStatus(IDX.visits['{fu}'])[0]") == 'Follow up 2' and in_tab(fu, 'visits') and nav() == n0, 'Lapsed visit set to Follow up 2 → back in Follow up')
