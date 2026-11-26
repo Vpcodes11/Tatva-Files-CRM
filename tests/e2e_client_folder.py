@@ -100,10 +100,16 @@ with sync_playwright() as p:
     # "How this folder was put together": no longer a card on the side, a closed line at the bottom
     go(h)
     ok(not q("[...document.querySelectorAll('.card h2')].some(x => x.textContent.includes('How this folder'))"), '"How this folder was put together" is no longer a card')
-    ok(q("(() => { const d = document.querySelector('details.srcinfo'); return !!d && !d.open && d.closest('.split > div:first-child') !== null && !d.nextElementSibling; })()"), 'it is a closed line at the bottom of the folder, under Payments')
+    ok(q("(() => { const d = document.querySelector('details.srcinfo'); return !!d && !d.open && !d.nextElementSibling; })()"), 'it is a closed line at the bottom of the folder, under Payments')
     a.click('details.srcinfo summary'); a.wait_for_timeout(150)
     ok(a.is_visible('details.srcinfo > div') and 'Added in CRM' in q("document.querySelector('details.srcinfo').innerText"), 'click opens it and shows where the folder came from')
-    nov = q("(D.clients.find(c => !D.visits.some(v => v.client === c.id)) || {}).id")
-    go(f'#/client/{nov}'); ok(not q("!!document.querySelector('#view .split')"), 'a folder with nothing for the side column uses the full width')
+    # no side column anywhere (owner: it had nothing useful); the folder's site visit is in the header line and the Remarks table
+    wv = q("(D.clients.find(c => D.visits.some(v => v.client === c.id && v.remark)) || {}).id")
+    go(f'#/client/{wv}')
+    ok(not q("!!document.querySelector('#view .split')") and not q("[...document.querySelectorAll('#view .card h2')].some(x => x.textContent.trim() === 'Site visits')"), 'no side column and no Site visits side card in a folder')
+    ok('Site visit:' in q("document.querySelector('#view .sub').innerText"), 'the site visit date is in the folder header line')
+    ok(q("[...document.querySelectorAll('#view table')].some(t => [...t.querySelectorAll('tbody tr')].some(r => r.innerText.includes('Site visit')))"), 'the site visit remark is in the Remarks table')
+    for hh in ['#/visits', f'#/visit/{q("D.visits[0].id")}', '#/plot/138', '#/landowners', '#/partner', '#/contractor/Khod%20Bhai', '#/expenses']:
+        go(hh); ok(not q("!!document.querySelector('#view .split')") and q("Math.max(...[...document.querySelectorAll('#view .card, #view .tscroll')].map(e => e.getBoundingClientRect().right)) >= document.querySelector('#view').getBoundingClientRect().right - 30"), 'full width, no side column: ' + hh)
     for hh in ['#/clients', '#/history', '#/check']: go(hh)
     print('ERRORS', errs)

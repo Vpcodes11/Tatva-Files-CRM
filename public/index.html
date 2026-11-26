@@ -163,7 +163,7 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .ltag{cursor:pointer;padding:3px 8px;border-radius:999px;border:1px solid transparent;user-select:none}.ltag:hover{border-color:var(--line2)}.ltag.on{border-color:var(--ink);font-weight:600}.ltag.dim{opacity:.35}
 .pt.faded{opacity:.15}
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
-.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
 .stat small{color:var(--ink3);font-size:12px}.stat div{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
 .tmeta .exp{float:right;color:var(--ink3)}.tmeta .exp a{cursor:pointer;color:var(--accent);font-weight:600}
@@ -1187,11 +1187,11 @@ V.visit = id => {
   const others = v.phone ? D.visits.filter(x => x.phone === v.phone && x.id !== v.id) : []; const vsr = visitSrs();
   return crumbs([['Files'], ['Site visits', '#/visits'], [v.name || 'Visit']]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${esc(v.name || 'Visit')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
   <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="visits|${esc(v.id)}|#/visits">Delete visit</button>` : ''}<button class="btn" data-fu="${esc(v.id)}">+ Add follow-up</button><button class="btn primary" data-flow="hold" data-vid="${esc(v.id)}">Take hold</button></div></div><p class="sub">${visitSrLabel(v, vsr)}</p>
-  <div class="split"><div>
+  <div>
   <div class="card"><h2>Visit <span class="src">${v.added ? 'added in the CRM' : 'New Site Visit List, row ' + v.row}</span></h2>${kv([['Visit date', ed('visits', v, 'date', 'date')], ['Name', ed('visits', v, 'name')], ['Phone', ed('visits', v, 'phone')], ['Agent', ed('visits', v, 'by', 'select', 'agents')], ['Status', ed('visits', v, 'status', 'select', 'visitStatus', `<span class="badge ${s[1]}">${s[0]}</span>`)], ['Remark', ed('visits', v, 'remark', 'text', '', remarkHtml(v.remark, true))]])}</div>
   ${c ? `<div class="card"><h2>Became a client</h2><a class="folder" data-go="#/client/${c.id}">${ico('users')}<div><b>${esc(c.name)}</b><span>Plot ${esc(c.plots.filter(p => D.plots[p]).join(', '))} · open client folder</span></div></a></div>` : ''}
   ${others.length ? `<div class="card"><h2>Other visits by this number</h2>${others.map(o => `<div style="padding:4px 0"><a data-go="#/visit/${o.id}" style="cursor:pointer;color:var(--accent)">${visitSrLabel(o, vsr)} · ${fd(o.date)}</a> <span class="muted">· ${esc(vStatus(o)[0])} · ${esc(o.by || '')}</span></div>`).join('')}</div>` : ''}
-  </div><div>${dropzone('visit/' + v.id, 'Visit photos & slips')}</div></div>`;
+  </div>`;
 };
 
 // ---------- Clients ----------
@@ -1276,7 +1276,7 @@ V.client = id => {
     ${b && isLapsedBooking(b) && b.lapsedOn ? `<p class="muted" style="font-size:12.5px;margin:-4px 0 10px">Lapsed on ${fd(b.lapsedOn)}${b.lapseReason ? ' · ' + esc(b.lapseReason) : ''}.</p>` : ''}
     <div class="pcols"><div>${hb}</div><div>${mou}${rl}</div></div>
     ${r ? `<div class="psub">Registry and maintenance</div>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance deposit', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')], ['Maintenance cheque', b ? ed('bookings', b, 'maintenanceCheque') : '—']])}` : b && isConvertedBooking(b) && owned.includes(p) ? `<div class="psub">Registry and maintenance</div><button class="btn small" data-mkrec="registry|${esc(p)}|${esc(id)}">+ Add registry &amp; maintenance</button>` : ''}
-    ${b && (b.paymentRemarks || b.dastavejRemarks) ? `<p class="muted" style="margin:12px 0 0">${esc([b.paymentRemarks, b.dastavejRemarks].filter(Boolean).join(' · '))}</p>` : ''}</div>`; };
+    ${b && (b.paymentRemarks || b.dastavejRemarks) ? `<div class="psub" style="margin-top:12px">Notes from the old sheet</div>${kv([...(b.paymentRemarks ? [['Payment remarks', ed('bookings', b, 'paymentRemarks')]] : []), ...(b.dastavejRemarks ? [['Dastavej remarks', ed('bookings', b, 'dastavejRemarks')]] : [])])}` : ''}</div>`; };
   const payT = shownPays.length ? tbl('pay-' + c.id + '-' + sel, [
       {k: 'sr', label: 'Sr.', type: 'num', get: p => p.sr}, {k: 'date', label: 'Date', type: 'date', get: p => p.date, cell: p => p.virtual ? fd(p.date) : ed('payments', p, 'date', 'date')},
       {k: 'text', label: 'Entry', get: p => p.text, cell: p => p.virtual ? `<i>${esc(p.text)}</i>` : ed('payments', p, 'text')}, {k: 'mode', label: 'Mode', get: p => normMode(p.mode), cell: p => p.virtual ? val(normMode(p.mode)) : ed('payments', p, 'mode', 'select', 'payMode', val(normMode(p.mode))) + `<span hidden data-own-label>${DETAIL_FIELDS.map(f => ed('payments', p, f)).join('')}</span>`},
@@ -1287,9 +1287,9 @@ V.client = id => {
   const vs = D.visits.filter(x => x.client === id); const vsr = visitSrs();
   return crumbs([['Files'], ['Clients', '#/clients'], [c.name]]) + `<div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px"><h1>${ed('clients', c, 'name')} <span class="badge ${s[1]}" style="vertical-align:4px">${s[0]}</span></h1>
   <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="clients|${esc(id)}|#/clients">Delete folder</button>` : ''}<button class="btn" data-flow="hold" data-cid="${esc(id)}">+ Hold another plot</button></div></div>
-  <p class="sub">Sr. ${c.sr} · ${ed('clients', c, 'phone')}${plots.length ? ' · Plot ' + plots.map(esc).join(', ') : ''}${b0.by ? ' · Agent: ' + esc(b0.by) : ''}</p>
+  <p class="sub">Sr. ${c.sr} · ${ed('clients', c, 'phone')}${plots.length ? ' · Plot ' + plots.map(esc).join(', ') : ''}${b0.by ? ' · Agent: ' + esc(b0.by) : ''}${vs.length ? ' · Site visit: ' + vs.map(x => `<a data-go="#/visit/${x.id}" style="cursor:pointer;color:var(--accent)" title="${esc(visitSrLabel(x, vsr))}">${fd(x.date)}</a>`).join(', ') : ''}</p>
   ${multi ? `<div class="row" style="gap:6px;margin:0 0 12px;flex-wrap:wrap"><span class="muted" style="font-size:12.5px;margin-right:4px">Show plot</span>${plots.map(pn => `<span class="chip${sel === pn ? ' on' : ''}" data-cid="${esc(id)}" data-csel="${esc(pn)}">Plot ${esc(pn)}</span>`).join('')}<span class="chip${sel === 'all' ? ' on' : ''}" data-cid="${esc(id)}" data-csel="all">All plots</span></div>` : ''}
-  <div class="stats" style="grid-template-columns:repeat(auto-fill,minmax(128px,1fr))"><div class="stat"><small>Plot no.</small><div>${esc(H.no)}</div></div>
+  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(128px,1fr))"><div class="stat"><small>Plot no.</small><div>${esc(H.no)}</div></div>
   <div class="stat"><small>Plot size</small><div>${H.size != null ? (Math.round(H.size * 100) / 100).toLocaleString('en-IN') + ' <span style="font-size:12px;color:var(--ink3)">sq yd</span>' : '—'}</div></div>
   <div class="stat"><small>Price per sq yd</small><div>${perYd != null ? inr(perYd) : '—'}</div></div>
   <div class="stat"><small>Final amount</small><div>${(() => { const fb = sel !== 'all' ? finalBk(sel) : plots.length === 1 ? finalBk(plots[0]) : null;
@@ -1301,16 +1301,17 @@ V.client = id => {
   ${ret.length ? `<div class="note">${ret.length} returned cheque${ret.length > 1 ? 's' : ''} (${inr(ret.reduce((a, p) => a + (p.amount || 0), 0))}) not counted in Paid till now.</div>` : ''}
   ${(() => { // "How this folder was put together" is background info: a closed line at the bottom, opened with a click
     const src = c.links.length ? `<details class="srcinfo"><summary>How this folder was put together <span class="muted">(${c.links.length} source${c.links.length > 1 ? 's' : ''})</span></summary>${c.links.map(l => `<div>${val(l.name)} <span class="muted">· ${esc(l.source)}${l.plot ? ' · plot ' + esc(l.plot) : ''} · ${esc(l.how)}</span></div>`).join('')}</details>` : '';
-    const notes = clientNotes(c).reverse();
+    // everything said by the client, newest first: call remarks, the hold remark, and the site visit remark with its follow-ups
+    const notes = clientNotes(c).concat(vs.filter(x => x.remark).map(x => ({date: x.date, kind: 'Site visit', text: x.remark, by: x.by, visit: x})))
+      .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     const notesT = notes.length ? tbl('notes-' + c.id, [
-      {k: 'date', label: 'Date', type: 'date', get: n => n.date, cell: n => n.note ? ed('notes', n.note, 'date', 'date') : ed('bookings', n.hold, 'holdDate', 'date')},
-      {k: 'kind', label: 'Type', get: n => n.kind, cell: n => n.note ? ed('notes', n.note, 'kind', 'select', 'noteKind') : `<span class="badge b-hold">At hold</span>${n.plot ? ' <span class="muted">plot ' + esc(n.plot) + '</span>' : ''}`},
-      {k: 'text', label: 'What the client said', nofilter: true, get: n => n.text, cell: n => n.note ? ed('notes', n.note, 'text') : ed('bookings', n.hold, 'remarks')},
-      {k: 'by', label: 'Added by', get: n => n.by || null}], notes, {noun: 'remarks'}).html : '<p class="muted" style="margin:0 0 6px">No remarks yet. After each payment call, add what the client said.</p>';
+      {k: 'date', label: 'Date', type: 'date', get: n => n.date, cell: n => n.note ? ed('notes', n.note, 'date', 'date') : n.visit ? ed('visits', n.visit, 'date', 'date') : ed('bookings', n.hold, 'holdDate', 'date')},
+      {k: 'kind', label: 'Type', get: n => n.kind, cell: n => n.note ? ed('notes', n.note, 'kind', 'select', 'noteKind') : n.visit ? `<a data-go="#/visit/${n.visit.id}" class="badge b-dev" style="cursor:pointer">Site visit</a>` : `<span class="badge b-hold">At hold</span>${n.plot ? ' <span class="muted">plot ' + esc(n.plot) + '</span>' : ''}`},
+      {k: 'text', label: 'What the client said', nofilter: true, get: n => n.text, cell: n => n.note ? ed('notes', n.note, 'text') : n.visit ? `<div class="rcell">${ed('visits', n.visit, 'remark', 'text', '', remarkHtml(n.visit.remark, true))}<button type="button" class="addq" data-fu="${esc(n.visit.id)}" title="Add a follow-up to this site visit">+ FU</button></div>` : ed('bookings', n.hold, 'remarks')},
+      {k: 'by', label: 'Added by / agent', get: n => n.by || null}], notes, {noun: 'remarks'}).html : '<p class="muted" style="margin:0 0 6px">No remarks yet. After each payment call, add what the client said.</p>';
     const remarksBlock = `<div class="row" style="justify-content:space-between;align-items:center;margin:6px 0 8px"><h2 style="font-size:15px;margin:0">Remarks</h2><button class="btn small" data-note="${esc(id)}">+ Add remark</button></div>${notesT}`;
     const main = `${shownPlots.map(plotCard).join('')}${remarksBlock}<div class="row" style="justify-content:space-between;align-items:center;margin:14px 0 8px"><h2 style="font-size:15px;margin:0">Payments${sel !== 'all' ? ' for plot ' + esc(sel) : ''}</h2><button class="btn primary small" data-flow="pay" data-cid="${esc(id)}">+ Add payment</button></div>${payT}${src}`;
-    const side = dropzone(id, 'Documents') + (vs.length ? `<div class="card"><h2>Site visits</h2>${vs.map(x => `<div style="padding:4px 0"><a data-go="#/visit/${x.id}" style="cursor:pointer;color:var(--accent)">${visitSrLabel(x, vsr)} · ${fd(x.date)}</a> <span class="muted">· ${esc(x.by || '')}</span></div>`).join('')}</div>` : '');
-    return side ? `<div class="split"><div>${main}</div><div>${side}</div></div>` : `<div>${main}</div>`; })()}`;
+    return `<div>${main}</div>`; })()}`;
 };
 
 // ---------- Plots ----------
@@ -1340,7 +1341,7 @@ V.plot = no => {
   const bks = D.bookings.filter(b => b.plot === no); const d = D.dastavej[no]; const r = D.registry[no]; const l = landByPlot()[no];
   const pays = D.payments.filter(x => x.plots.includes(no));
   return crumbs([['Files'], ['Plots', '#/plots'], ['Plot ' + no]]) + `<h1>Plot ${esc(no)} <span class="badge ${pc[2]}" style="vertical-align:4px">${pc[1]}</span></h1><p class="sub">${plotSrLabel(p)}</p>
-  <div class="split"><div>
+  <div>
   ${D.plots[no] ? `<div class="card"><h2>Plot <span class="src">Plot List sheet</span></h2>${kv([['Status', ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${pc[2]}">${pc[1]}</span>`)], ['Area (sq yd)', ed('plots', p, 'area', 'number')], ['Note', ed('plots', p, 'note')]])}</div>` : ''}
   ${owner ? `<div class="card"><h2>Client</h2><a class="folder" data-go="#/client/${owner.id}">${ico('users')}<div><b>${esc(owner.name)}</b><span>${esc(owner.phone || '')} · open client folder</span></div></a></div>` : ''}
   <div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Holds and bookings <span class="src">Booking list</span></h2>${bks.length ? `<table><thead><tr><th class="sr">Sr.</th><th>Client</th><th>Hold date</th><th>Outcome</th><th class="num">Finalised</th><th class="num">Down payment</th></tr></thead><tbody>${bks.map(b => `<tr class="click" data-go="#/client/${D.clients.find(c => c.bookings.includes(b.id)).id}"><td class="sr">${b.sr}</td><td>${val(b.client)}</td><td>${ed('bookings', b, 'holdDate', 'date')}</td><td>${ed('bookings', b, 'outcome', 'select', 'outcome', val(outcomeLabel(b)))}</td><td class="num">${ed('bookings', b, 'finalAmount', 'money')}</td><td class="num">${ed('bookings', b, 'dpAmount', 'money')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="padding:0 10px">None.</p>'}</div>
@@ -1348,7 +1349,7 @@ V.plot = no => {
   ${r ? `<div class="card"><h2>Registry & maintenance <span class="src">Registry sheet</span></h2>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')]])}</div>` : pc[1] === 'Sold' && owner ? `<div class="card"><h2>Registry & maintenance</h2><button class="btn small" data-mkrec="registry|${esc(no)}|${esc(owner.id)}">+ Add registry &amp; maintenance</button></div>` : ''}
   ${l ? `<div class="card"><h2>Sold plot register <span class="src">Sr. ${l.sr}</span></h2>${kv([['Owner', ed('landowners', l, 'owner')], ['Sq yard', ed('landowners', l, 'sqYard', 'number')], ['Total sale value', ed('landowners', l, 'saleValue', 'money')], ['Anjanee paid', ed('landowners', l, 'anjaneePaid', 'money')]])}</div>` : pc[1] === 'Sold' ? `<div class="card"><h2>Sold plot register</h2><button class="btn small" data-reg="${esc(no)}">+ Add to register</button></div>` : ''}
   ${pays.length ? `<div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Payments mentioning this plot</h2><table><tbody>${pays.map(x => `<tr><td class="sr">${x.sr}</td><td>${ed('payments', x, 'date', 'date')}</td><td>${ed('payments', x, 'text')}</td><td>${ed('payments', x, 'status', 'select', 'payStatus', payBadge(x))}</td><td class="num">${amtCell(x, ed('payments', x, 'amount', 'money'))}</td></tr>`).join('')}</tbody></table></div>` : ''}
-  </div><div>${dropzone('plot/' + no, 'Plot papers')}</div></div>`;
+  </div>`;
 };
 
 // ---------- Landowners / partner ----------
@@ -1375,7 +1376,7 @@ V.landowners = () => {
   const chip = (k, label, n) => `<span class="chip${(pick || '') === k ? ' on' : ''}" data-lv="soldReg" data-val="${k}">${label} <span class="muted">${n}</span></span>`;
   return crumbs([['Files'], ['Sold plots']]) + `<h1>Sold plots</h1><p class="sub">Every sold plot: the plots that are Sold in Plots, plus any plot in the "DASTAVEJ PAYMENT" register. Sale value and Paid (register) come from that register; use <b>+ Add to register</b> for a newly sold plot.</p>
   <div class="row" style="gap:6px;margin:-4px 0 14px">${chip('', 'All sold plots', rows.length)}${chip('in', 'In Dastavej register', inReg)}${chip('out', 'Not in register', rows.length - inReg)}</div>
-  <div class="split"><div>${t.html}</div><div>${dropzone('landowners', 'Sold plot documents')}</div></div>`;
+  <div>${t.html}</div>`;
 };
 V.partner = () => {
   const L = D.landowners.filter(x => x.anjaneePaid != null || x.anjaneeRemaining != null);
@@ -1386,7 +1387,7 @@ V.partner = () => {
   const paid = t.shown.reduce((a, x) => a + (x.anjaneePaid || 0), 0);
   return crumbs([['Files'], ['Land partner – Anjanee Infraspace']]) + `<div class="row" style="justify-content:space-between"><h1>Land partner – Anjanee Infraspace</h1><button class="btn primary" data-anjpay>+ Add payment to Anjanee</button></div><p class="sub">Settlement per plot: the Anjanee Infraspace columns of the old Sold plots sheet plus payments added here. Hover "Last payment" to see each payment.</p>
   <div class="stats"><div class="stat"><small>Paid</small><div>${inr(paid)}</div></div><div class="stat"><small>Plots</small><div>${t.shown.length}</div></div></div>
-  <div class="split"><div>${t.html}</div><div>${dropzone('partner', 'Agreements & settlement papers')}</div></div>`;
+  <div>${t.html}</div>`;
 };
 
 // ---------- Contractors ----------
@@ -1404,7 +1405,7 @@ V.contractor = name => {
     {k: 'part', label: 'Particulars', get: x => x.particulars, cell: x => ed('expenses', x, 'particulars')}, {k: 'for', label: 'For', get: x => expFor(x), cell: x => ed('expenses', x, 'for', 'select', 'forWhat')},
     {k: 'amt', label: 'Amount', type: 'money', get: x => x.amount, cell: x => ed('expenses', x, 'amount', 'money')}], c.expenses, {totals: ['amt'], noun: 'expenses'});
   return crumbs([['Files'], ['Contractors', '#/contractors'], [name]]) + `<h1>${esc(name)}</h1><p class="sub">Ledger = payments made to this contractor (old sheet + added here). Site expenses = expenses tagged with this contractor. An old sheet payment can be in both lists.</p>
-  <div class="split"><div><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="font-size:15px;margin:0">Ledger</h2><button class="btn primary small" data-ledger="${esc(name)}">+ Add payment</button></div>${l.html}<h2 style="font-size:15px;margin:18px 0 8px">Site expenses</h2>${e.html}</div><div>${dropzone('contractor/' + name, 'Bills & payment proofs')}</div></div>`;
+  <div><div class="row" style="justify-content:space-between;align-items:center;margin:0 0 8px"><h2 style="font-size:15px;margin:0">Ledger</h2><button class="btn primary small" data-ledger="${esc(name)}">+ Add payment</button></div>${l.html}<h2 style="font-size:15px;margin:18px 0 8px">Site expenses</h2>${e.html}</div>`;
 };
 
 // ---------- Site expenses ----------
@@ -1432,7 +1433,7 @@ V.expenses = () => {
   ${showAdd === 'expense' ? addExpenseForm() : ''}
   <div class="stats"><div class="stat"><small>Total shown</small><div>${inr(sum(S))}</div></div><div class="stat"><small>Plots</small><div>${inr(sum(S.filter(e => expFor(e) === 'Plots')))}</div></div><div class="stat"><small>Villas</small><div>${inr(sum(S.filter(e => expFor(e) === 'Villas')))}</div></div><div class="stat"><small>Entries</small><div>${S.length}</div></div></div>
   <div class="card"><h2>By type of expense</h2><div class="bars">${cats.map(([k, v]) => `<div class="bar" style="cursor:default"><span>${esc(k)}</span><div class="track"><div class="fill" style="width:${(v / max * 100).toFixed(1)}%"></div></div><span class="num" style="text-align:right">${inr(v)}</span></div>`).join('')}</div></div>
-  ${t.html}${dropzone('expenses', 'Expense bills')}`;
+  ${t.html}`;
 };
 const landReg = no => D.landowners.find(x => String(x.plot) === String(no));
 function newRegRec(no) {
