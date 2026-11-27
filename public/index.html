@@ -235,6 +235,38 @@ th,th.num{white-space:normal;vertical-align:bottom;min-width:40px}th.pcell{min-w
   .stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px}.stat{padding:10px 12px}.stat div{font-size:17px;overflow-wrap:anywhere}
   td,th{padding:6px 5px}.tmeta .exp{float:none;display:block;margin-top:4px}main{padding:12px 12px 50px}}
 @media (max-width:380px){.stat div{font-size:15.5px}}
+
+/* ===== modern mobile layout (27 Nov 2026) ===== */
+#login input{width:100%;min-width:0}
+@media (max-width:900px){
+  aside{position:sticky!important;top:0;z-index:40;background:rgba(255,255,255,.94);backdrop-filter:saturate(1.4) blur(10px);-webkit-backdrop-filter:saturate(1.4) blur(10px);box-shadow:0 1px 0 var(--line),0 6px 18px rgba(60,40,20,.05)}
+  .brand{padding:2px 4px 8px}.brand span{display:none}
+  .nav{scrollbar-width:none;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);padding-right:24px}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{border-radius:999px;padding:7px 12px;min-height:36px}
+}
+@media (max-width:640px){
+  .proto{display:none}
+  .topbar{gap:8px;margin-bottom:12px}.search{flex:1 1 100%;max-width:none}
+  .who{margin-left:0;width:100%;justify-content:space-between;gap:6px;font-size:12.5px}.who>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:auto}
+  .who .btn{padding:6px 10px;font-size:12px;white-space:nowrap}
+  h1{font-size:21px;line-height:1.2}.sub{font-size:13px;line-height:1.45}
+  .card{border-radius:12px}
+  /* forms open as a sheet from the bottom of the screen, buttons stay in reach */
+  .dbg{place-items:end stretch;padding:0}
+  .dlg,.dlg.wide{width:100%;max-height:92vh;max-height:92dvh;border-radius:18px 18px 0 0;animation:sheet .22s ease-out;display:flex;flex-direction:column}
+  .dlg .db{overflow:auto;flex:1 1 auto;padding:14px 16px}.dlg .dh{padding:14px 16px 10px;flex:none}
+  .dlg .df{flex:none;padding:10px 16px calc(12px + env(safe-area-inset-bottom));background:var(--panel)}
+  .dlg .df .btn{flex:1;justify-content:center;min-height:42px}
+  .dlg .dx{font-size:26px;padding:0 4px}
+  /* 16px boxes: iPhones don't zoom in when a box is tapped */
+  .dlg input,.dlg select,.dlg textarea,.search input,#login input,.pop input[type=search],.pop input[type=number]{font-size:16px}
+  .dlg .chip{padding:8px 14px}
+  .bar{grid-template-columns:minmax(0,1fr) auto;row-gap:4px}.bar .track{grid-column:1/-1;grid-row:2}.bar>*:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+@keyframes sheet{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
+/* touch screens: bigger targets for pencils and small buttons */
+@media (pointer:coarse){.pen{width:30px;height:30px;opacity:.6}.btn{min-height:36px}.tmeta a{display:inline-block;padding:6px 2px}}
 </style>
 </head>
 <body>
@@ -932,7 +964,9 @@ const closePop = () => { $('#popBox').innerHTML = ''; pop = null; };
 const crumbs = parts => `<div class="crumbs">${parts.map(([l, h]) => h ? `<a data-go="${h}">${esc(l)}</a>` : esc(l)).join(' / ')}</div>`;
 const folderCard = (href, title, sub) => `<a class="folder" data-go="${href}">${ico('folder')}<div><b>${esc(title)}</b><span>${esc(sub)}</span></div></a>`;
 const kv = pairs => `<div class="grid2">${pairs.map(([k, v]) => `<div class="kv"><small>${esc(k)}</small><div>${v}</div></div>`).join('')}</div>`;
-function renderNav(cur) {
+// phones / tablets: the menu is a sideways strip; keep the open page's tab in view
+function renderNav(cur) { renderNavItems(cur); const n = $('#nav'), on = n.querySelector('a.on'); if (on && n.scrollWidth > n.clientWidth) n.scrollLeft = Math.max(0, on.offsetLeft - n.offsetLeft - (n.clientWidth - on.offsetWidth) / 2); }
+function renderNavItems(cur) {
   const NAV = [['visits', 'Site visits', 'pin', D.visits.filter(v => vStatus(v)[0] !== 'Lapsed').length], ['clients', 'Clients', 'users', D.clients.filter(c => clientStatus(c)[0] !== 'Lapsed').length], ['plots', 'Plots', 'grid', Object.keys(D.plots).length],
     ['landowners', 'Sold plots', 'land', new Set([...Object.values(D.plots).filter(p => plotClass(p)[1] === 'Sold').map(p => p.no), ...Object.keys(landByPlot())]).size], ['partner', 'Land partner', 'hand'], ['contractors', 'Contractors', 'tool', D.contractors.length],
     ['expenses', 'Site expenses', 'coins', D.expenses.length], ['incentives', 'Incentives', 'award', D.incentives.length]];
