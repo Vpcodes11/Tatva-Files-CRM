@@ -223,6 +223,28 @@ async function lapseRefusal(env, cur, next, getRec) {
   if (/^(mou done|dastavej)/i.test(ds) || /mou done/i.test(cur.mou || '') || (cur.mouOpted === 'Opted' && (cur.mouDate || cur.mouNo)) || /done|office/i.test(cur.dastavejStatus || '')) return 'This plot cannot be lapsed: the MOU is done.';
   return null;
 }
+// What an Agent may save: site visits (add, edit, follow-ups) and a new hold taken from a site visit (a new client
+// folder, its hold booking and hold payment, and the plot going from available to Hold). Nothing else: client folders,
+// plots and the office modules are view-only for agents.
+const AGENT_NO = 'Agents can add and edit site visits and take a hold from a site visit. Everything else is done by an Admin.';
+async function agentRefusal(ops, getRec) {
+  for (const op of ops) {
+    if (op.op === 'step') { if (!['visit', 'hold'].includes(op.type)) return AGENT_NO; continue; }
+    if (op.op === 'del') return 'Only a Super admin can delete.';
+    if (op.coll === 'visits') continue;
+    if (op.op !== 'put') return AGENT_NO;
+    const cur = await getRec(op.coll, op.id), d = op.data || {};
+    if (['clients', 'payments'].includes(op.coll) && !cur) continue;
+    if (op.coll === 'bookings' && !cur && /hold/i.test(d.outcome || '')) continue;
+    if (op.coll === 'plots' && cur) {
+      // only the status may change (id / sr are bookkeeping and may or may not be stored on the plot)
+      const same = [...new Set([...Object.keys(cur), ...Object.keys(d)])].filter(k => !['status', 'id', 'sr'].includes(k)).every(k => JSON.stringify(cur[k] ?? null) === JSON.stringify(d[k] ?? null));
+      if (same && /^hold$/i.test(d.status || '') && !/^\s*(sold|hold)/i.test(cur.status || '')) continue; // from available (UNSOLD …), never from Sold / Hold
+    }
+    return AGENT_NO;
+  }
+  return null;
+}
 function lockError(user, coll, current, next) {
   if (user.role !== 'Agent') return null;
   if (coll === 'visits' && current && isConvertedVisitStatus(current.status) && next && !isConvertedVisitStatus(next.status))
@@ -288,7 +310,18 @@ async function apiLogout(env, req) {
   return json({ok: true}, 200, {'set-cookie': sessionCookie('', 0)});
 }
 
-async function apiData(env) {
+// Agents (owner's rule, Nov 2026): they see Site visits, Clients and Plots, and only their own incentives. The office
+// modules (sold plot register, land partner, contractors, site expenses), the edit history and other agents'
+// incentives are not sent to them at all.
+const agentNames = by => String(by || '').split(/,|&|\//).map(s => s.trim().toLowerCase()).filter(Boolean);
+const isOwnAgent = (user, by) => { const me = String(user.name || '').trim().toLowerCase(), first = me.split(/\s+/)[0];
+  return !!me && agentNames(by).some(a => a === me || a.split(/\s+/)[0] === first); };
+function agentView(D, user) {
+  for (const k of ['expenses', 'landowners', 'advances', 'contractors']) D[k] = [];
+  D.incentives = D.incentives.filter(x => isOwnAgent(user, x.by));
+  D.bookings.forEach(b => { if (!isOwnAgent(user, b.by)) for (const f of ['incentiveStatus', 'incentiveReleased', 'incentivePending']) delete b[f]; });
+}
+async function apiData(env, user) {
   const [recs, edits, steps, version] = await env.DB.batch([
     env.DB.prepare('SELECT coll, id, sr, data FROM records'),
     env.DB.prepare('SELECT id, coll, rec_id, field, old, new, label, undone, undo_of, user_name, role, at FROM edits ORDER BY id'),
@@ -310,11 +343,13 @@ async function apiData(env) {
   ['visits', 'bookings', 'payments', 'expenses', 'landowners', 'advances', 'incentives', 'notes'].forEach(k => D[k].sort(byRow));
   D.clients.sort((a, b) => (a.sr || 0) - (b.sr || 0));
   D.contractors.forEach(c => { c.ledger = ledger.filter(l => l.contractor === c.name).sort(byRow); });
+  const agent = user && user.role === 'Agent';
+  if (agent) agentView(D, user);
   return json({
     empty: recs.results.length === 0,
     data: D,
-    edits: edits.results.map(e => ({...e, old: JSON.parse(e.old), new: JSON.parse(e.new), undone: !!e.undone})),
-    steps: steps.results.map(s => ({...s, data: JSON.parse(s.data)})),
+    edits: agent ? [] : edits.results.map(e => ({...e, old: JSON.parse(e.old), new: JSON.parse(e.new), undone: !!e.undone})),
+    steps: agent ? [] : steps.results.map(s => ({...s, data: JSON.parse(s.data)})),
     version: Number(version.results[0] ? version.results[0].value : 0)
   });
 }
@@ -340,6 +375,7 @@ async function apiOps(env, req, user) {
     return r ? JSON.parse(r.data) : null;
   };
   const working = {}; // records changed earlier in this same request
+  if (user.role === 'Agent') { const no = await agentRefusal(ops, getRec); if (no) return fail(403, no); }
   for (const op of ops) {
     if (op.op === 'patch' || op.op === 'put' || op.op === 'del') {
       if (!COLLS.has(op.coll) || typeof op.id !== 'string' || !op.id || op.id.length > 100) return fail(400, 'Unknown record.');
@@ -494,7 +530,7 @@ async function apiUsers(env, req, user) {
     if (!name) return fail(400, 'Enter the name.');
     if (!validUsername(b.username)) return fail(400, 'Username: 3–40 letters or numbers (dot, dash and underscore are fine).');
     if (!ROLES.includes(b.role)) return fail(400, 'Choose a role.');
-    if (b.role === 'Super admin' && user.role !== 'Super admin') return fail(403, 'Only a Super admin can create another Super admin.');
+    if (b.role !== 'Agent' && user.role !== 'Super admin') return fail(403, 'An Admin can add Agents only. Ask a Super admin to add an Admin or Super admin.');
     if (!validPassword(b.password)) return fail(400, 'Password must have at least 6 characters.');
     const exists = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(b.username).first();
     if (exists) return fail(409, 'This username is already taken.');
@@ -510,13 +546,13 @@ async function apiUserUpdate(env, req, user, id) {
   if (!canManageUsers(user)) return fail(403, 'Only Admin or Super admin can manage users.');
   const target = await env.DB.prepare('SELECT * FROM users WHERE id = ?').bind(id).first();
   if (!target) return fail(404, 'User not found.');
-  if (target.role === 'Super admin' && user.role !== 'Super admin') return fail(403, 'Only a Super admin can change a Super admin.');
+  if (target.role !== 'Agent' && user.role !== 'Super admin' && target.id !== user.id) return fail(403, 'An Admin can change Agents only. Ask a Super admin.');
   const b = await req.json().catch(() => ({}));
   const sets = [], vals = [];
   if (b.name !== undefined) { const n = String(b.name).trim(); if (!n) return fail(400, 'Enter the name.'); sets.push('name = ?'); vals.push(n); }
   if (b.role !== undefined) {
     if (!ROLES.includes(b.role)) return fail(400, 'Choose a role.');
-    if (b.role === 'Super admin' && user.role !== 'Super admin') return fail(403, 'Only a Super admin can make someone Super admin.');
+    if (b.role !== target.role && b.role !== 'Agent' && user.role !== 'Super admin') return fail(403, 'Only a Super admin can make someone Admin or Super admin.');
     if (target.id === user.id && b.role !== user.role) return fail(400, 'You cannot change your own role.');
     sets.push('role = ?'); vals.push(b.role);
   }
@@ -575,7 +611,7 @@ export default {
 
       const user = await currentUser(env, req);
       if (!user) return fail(401, 'Please sign in again.');
-      if (path === '/api/data' && req.method === 'GET') return apiData(env);
+      if (path === '/api/data' && req.method === 'GET') return apiData(env, user);
       if (path === '/api/version' && req.method === 'GET') return apiVersion(env);
       if (path === '/api/ops' && req.method === 'POST') return apiOps(env, req, user);
       if (path === '/api/password' && req.method === 'POST') return apiPassword(env, req, user);

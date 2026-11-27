@@ -61,7 +61,7 @@ with sync_playwright() as p:
     r = q(f"fetch('/api/ops', {{method: 'POST', headers: {{'content-type': 'application/json'}}, body: JSON.stringify({{ops: [{{op: 'patch', coll: 'bookings', id: '{old}', field: 'outcome', value: 'Lapsed'}}]}})}}).then(r => r.status)")
     ok(r == 403, 'server refuses to lapse a plot with a dastavej (%s)' % r)
 
-    # 4. an Agent can lapse a hold but not a booked plot
+    # 4. an Agent can lapse neither a hold nor a booked plot
     ok(q("fetch('/api/users',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'Lapse Agent 2',username:'lapseagent2',role:'Agent',password:'pass1234'})}).then(r=>r.status)") in (200, 201), 'added an Agent')
     pl4, cid4, bid4 = hold('Lapse Four', '9666600004'); reload(f'#/client/{cid4}')
     a.click('.acts [data-flow=book]'); a.fill('#fb_final', '900000'); a.click('[data-dlgok]'); a.wait_for_timeout(1500)
@@ -71,7 +71,9 @@ with sync_playwright() as p:
     r = g.evaluate(E, f"fetch('/api/ops', {{method: 'POST', headers: {{'content-type': 'application/json'}}, body: JSON.stringify({{ops: [{{op: 'patch', coll: 'bookings', id: '{bid4}', field: 'outcome', value: 'Lapsed'}}]}})}}).then(r => r.status)")
     ok(r == 403, 'server refuses an Agent lapsing a booked plot (%s)' % r)
     pl5, cid5, bid5 = hold('Lapse Five', '9666600005'); g.reload(); g.wait_for_selector('#nav a'); g.evaluate(E, f"location.hash='#/client/{cid5}'"); g.wait_for_timeout(400)
-    g.click('.acts [data-flow=lapse]'); g.click('[data-dlgok]'); g.wait_for_timeout(1500)
-    ok(g.evaluate(E, f"IDX.bookings['{bid5}'].outcome") == 'Lapsed', 'Agent can lapse a plot that is only on hold')
+    # owner's rule (Nov 27 2026): client folders are view-only for agents, so they can't lapse a hold either
+    ok(not g.evaluate(E, "!!document.querySelector('[data-flow=lapse]')"), 'Agent: no Lapsed button on a plot on hold (folder is view-only)')
+    r = g.evaluate(E, f"fetch('/api/ops', {{method: 'POST', headers: {{'content-type': 'application/json'}}, body: JSON.stringify({{ops: [{{op: 'patch', coll: 'bookings', id: '{bid5}', field: 'outcome', value: 'Lapsed'}}]}})}}).then(r => r.status)")
+    ok(r == 403 and g.evaluate(E, f"IDX.bookings['{bid5}'].outcome") != 'Lapsed', 'server refuses an Agent lapsing a hold (%s)' % r)
     for hh in ['#/clients', '#/plots', '#/check', '#/history']: go(hh)
     ok(not errs, 'no page errors (%s)' % errs)

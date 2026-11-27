@@ -641,10 +641,15 @@ function lockReason(coll, o, f) {
   if (coll === 'bookings' && f === 'outcome' && isConvertedBooking(o)) return 'This plot is Booked. Only Admin or Super admin can change the booking status.';
   return null;
 }
+// Agents (owner's rule, Nov 2026): they can add and edit site visits and take a hold from a visit. Client folders,
+// plots and their own incentives are view-only for them; the office modules are hidden (and not sent by the server).
+const isAgent = () => ME.role === 'Agent';
+const AGENT_PAGES = ['visits', 'visit', 'clients', 'client', 'plots', 'plot', 'incentives'];
 function ed(coll, o, f, kind = 'text', opt = '', shown) {
   if (!o) return '<span class="muted">—</span>';
   const v = getF(coll, o, f);
   const disp = shown != null ? shown : kind === 'date' ? fd(v) : kind === 'money' ? inr(v) : val(v);
+  if (isAgent() && coll !== 'visits') return `<span class="ro">${disp}</span>`; // view only: no pencil
   const lock = lockReason(coll, o, f);
   const edited = editedSet.has(coll + '|' + o.id + '|' + f);
   return `<span class="ed${lock ? ' locked' : ''}${edited ? ' edited' : ''}" data-e="${esc(coll)}|${esc(o.id)}|${esc(f)}|${kind}|${opt}"${lock ? ` data-lock="${esc(lock)}"` : ''}>${disp}${lock ? `<span class="lock">${/linked to a client/.test(lock) ? 'from folder' : 'locked'}</span>` : ''}</span>`;
@@ -931,6 +936,7 @@ function renderNav(cur) {
   const NAV = [['visits', 'Site visits', 'pin', D.visits.filter(v => vStatus(v)[0] !== 'Lapsed').length], ['clients', 'Clients', 'users', D.clients.filter(c => clientStatus(c)[0] !== 'Lapsed').length], ['plots', 'Plots', 'grid', Object.keys(D.plots).length],
     ['landowners', 'Sold plots', 'land', new Set([...Object.values(D.plots).filter(p => plotClass(p)[1] === 'Sold').map(p => p.no), ...Object.keys(landByPlot())]).size], ['partner', 'Land partner', 'hand'], ['contractors', 'Contractors', 'tool', D.contractors.length],
     ['expenses', 'Site expenses', 'coins', D.expenses.length], ['incentives', 'Incentives', 'award', D.incentives.length]];
+  if (isAgent()) { $('#nav').innerHTML = '<div class="navlabel">Files</div>' + NAV.filter(([k]) => AGENT_PAGES.includes(k)).map(([k, l, i, c]) => `<a class="${cur === k ? 'on' : ''}" data-go="#/${k}">${ico(i)}${esc(k === 'incentives' ? 'My incentives' : l)}${c != null ? `<span class="ct">${c}</span>` : ''}</a>`).join(''); return; }
   $('#nav').innerHTML = '<div class="navlabel">Files</div>' + NAV.map(([k, l, i, c]) => `<a class="${cur === k ? 'on' : ''}" data-go="#/${k}">${ico(i)}${esc(l)}${c != null ? `<span class="ct">${c}</span>` : ''}</a>`).join('') +
     `<div class="navlabel">Admin</div>${ME.role !== 'Agent' ? `<a class="${cur === 'users' ? 'on' : ''}" data-go="#/users">${ico('users')}Users</a>` : ''}<a class="${cur === 'history' ? 'on' : ''}" data-go="#/history">${ico('clock')}Edit history<span class="ct">${store.edits.filter(e => !e.undone).length}</span></a><a class="${cur === 'check' ? 'on' : ''}" data-go="#/check">${ico('check')}Data check<span class="ct">${D.payments.filter(p => !p.clients.length).length}</span></a>${canDelete() ? `<a class="${cur === 'trash' ? 'on' : ''}" data-go="#/trash">${ico('clock')}Deleted items</a>` : ''}${canExport() ? `<a data-expall>${ico('check')}Export all to Excel</a>` : ''}`;
 }
@@ -1603,7 +1609,9 @@ V.incentives = () => {
   const a = tbl('incentive-agents', [{k: 'sr', label: 'Sr.', type: 'num', get: g => Object.values(agents).indexOf(g) + 1}, {k: 'name', label: 'Agent', get: g => g.name},
     {k: 'n', label: 'Bookings', type: 'num', get: g => g.n}, {k: 'rel', label: 'Released', type: 'money', get: g => g.rel}, {k: 'pend', label: 'Pending', type: 'money', get: g => g.pend}],
     Object.values(agents).sort((x, y) => y.n - x.n), {totals: ['rel', 'pend'], noun: 'agents'});
-  const miss = incMissing().length;
+  const miss = isAgent() ? 0 : incMissing().length;
+  if (isAgent()) return crumbs([['Files'], ['My incentives']]) + `<h1>My incentives</h1><p class="sub">Your incentive rows (view only). Final = Slab × (rate ÷ 5,750) × (size ÷ 200) − Advance. Ask an Admin if something is missing.</p>
+  <h2 style="font-size:15px;margin:0 0 8px">Calculation</h2>${t.html}<h2 style="font-size:15px;margin:18px 0 8px">From the booking list</h2>${a.html}`;
   return crumbs([['Files'], ['Incentives']]) + `<div class="row" style="justify-content:space-between"><h1>Incentives</h1><button class="btn primary" data-addinc>+ Add incentive</button></div><p class="sub">Standard rate ₹5,750 /sq yd. Final = Slab × (rate ÷ 5,750) × (size ÷ 200) − Advance, worked out automatically.</p>
   ${miss ? `<div class="note">${miss} plot${miss > 1 ? 's' : ''} booked since ${fd(incFrom())} ${miss > 1 ? 'have' : 'has'} no incentive row yet. Use <b>+ Add incentive</b> to add ${miss > 1 ? 'them' : 'it'}.</div>` : ''}
   <h2 style="font-size:15px;margin:0 0 8px">Calculation</h2>${t.html}<h2 style="font-size:15px;margin:18px 0 8px">By agent (booking list)</h2>${a.html}`;
@@ -1814,14 +1822,14 @@ V.users = () => {
     {k: 'role', label: 'Role', get: u => u.role, order: ['Super admin', 'Admin', 'Agent']},
     {k: 'active', label: 'Status', get: u => u.active ? 'Active' : 'Switched off', cell: u => u.active ? '<span class="badge b-sold">Active</span>' : '<span class="badge b-lapsed">Switched off</span>'},
     {k: 'last', label: 'Last sign-in', type: 'date', get: u => u.last_login ? u.last_login.slice(0, 10) : null},
-    {k: 'act', label: '', nofilter: true, get: () => null, cell: u => (u.role === 'Super admin' && ME.role !== 'Super admin') ? '' : `<button class="btn small" data-uedit="${u.id}">Edit</button>`}
+    {k: 'act', label: '', nofilter: true, get: () => null, cell: u => (u.role !== 'Agent' && ME.role !== 'Super admin' && u.id !== ME.id) ? '' : `<button class="btn small" data-uedit="${u.id}">Edit</button>`}
   ], USERS, {noun: 'users'});
   return crumbs([['Admin'], ['Users']]) + `<div class="row" style="justify-content:space-between"><h1>Users</h1><button class="btn primary" data-uadd>+ Add user</button></div>
-  <p class="sub">Agents can work on everything except changing a Booked visit or booking. Admins can also manage users. Only a Super admin can add or change another Super admin.</p>${t.html}`;
+  <p class="sub"><b>Agent</b>: Site visits (add, edit, follow-ups, take a hold), and view-only Clients, Plots and their own incentives; the other modules are hidden. <b>Admin</b>: everything except deleting and restoring; adds and changes Agents. <b>Super admin</b>: everything, including Admins and Super admins. An agent's incentives are matched by their name here, so use the same name as on their site visits (e.g. "Hiren Bhai").</p>${t.html}`;
 };
 function userDlg(u) {
-  const roles = ME.role === 'Super admin' ? ['Agent', 'Admin', 'Super admin'] : ['Agent', 'Admin'];
   const self = u && u.id === ME.id;
+  const roles = ME.role === 'Super admin' ? ['Agent', 'Admin', 'Super admin'] : self ? [u.role] : ['Agent']; // an Admin adds and changes Agents only
   openDlg(u ? 'Edit user' : 'Add user', u ? esc(u.username) : 'They sign in with this username and password', `
     <label>Name *<input id="u_name" value="${esc(u ? u.name : '')}"></label>
     ${u ? '' : '<label>Username *<input id="u_user" autocapitalize="none" placeholder="e.g. lakshit"></label>'}
@@ -1885,6 +1893,16 @@ function problems() {
 }
 
 // ---------- router ----------
+// Agents: remove every button that changes a client folder, a plot or an office module; switches show but can't be used.
+// Taking a hold from a site visit stays. (The server refuses these changes too.)
+function agentViewOnly(page) {
+  const view = $('#view');
+  view.querySelectorAll('[data-flow]:not([data-vid]), [data-del], [data-note], [data-mkrec], [data-reg], [data-anjpay], [data-addinc], [data-addcon], [data-ledger], [data-add], [data-save]').forEach(el => el.remove());
+  if (page === 'client') view.querySelectorAll('[data-fu]').forEach(el => el.remove());
+  if (page !== 'visits' && page !== 'visit' && page) view.querySelectorAll('.ed').forEach(el => el.classList.remove('ed')); // e.g. visit remarks inside a folder: view only there
+  view.querySelectorAll('[data-flow=hold][data-vid]').forEach(el => { const v = IDX.visits[el.dataset.vid]; if (v && v.client) el.remove(); }); // a visit already in a folder: the admin adds the hold
+  view.querySelectorAll('[data-mouopt], [data-refund]').forEach(el => { el.disabled = true; el.removeAttribute('data-mouopt'); el.removeAttribute('data-refund'); el.title = 'View only'; });
+}
 function render() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
   const [v, a, b] = parts; let html, nav = v || 'visits';
@@ -1905,9 +1923,12 @@ function render() {
   else if (v === 'history') html = V.history();
   else if (v === 'check') html = V.check();
   else html = V.visits();
+  if (isAgent() && v && !AGENT_PAGES.includes(v)) { html = '<h1>Not available</h1><p class="sub">This page is for Admins. Agents can use Site visits, Clients, Plots and My incentives.</p>'; nav = 'visits'; }
   renderNav(nav);
   const active = document.activeElement; const restore = active && active.dataset && active.dataset.f ? [active.dataset.f, active.selectionStart] : null;
-  $('#view').innerHTML = html; addPencils($('#view'));
+  $('#view').innerHTML = html;
+  if (isAgent()) agentViewOnly(v);
+  addPencils($('#view'));
   $('#view').querySelectorAll('table').forEach(tb => { if (tb.closest('.tscroll, .dpop')) return; const w = document.createElement('div'); w.className = 'tscroll'; tb.parentNode.insertBefore(w, tb); w.appendChild(tb); });
   if (restore) { const el = document.querySelector(`[data-f="${restore[0]}"]`); if (el) { el.focus(); try { el.setSelectionRange(restore[1], restore[1]); } catch (x) {} } }
 }
