@@ -60,6 +60,7 @@ h1{font-size:22px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
 .chip.diff{border-color:#d5caef;color:var(--diff)}.chip.diff.on{background:var(--diff);color:#fff;border-color:var(--diff)}
 .badge{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .b-sold{background:var(--sold-bg);color:var(--sold)}.b-hold{background:var(--hold-bg);color:var(--hold)}
+.mou-sep{border-top:1px dashed var(--line);margin:2px 0 10px}
 .b-lapsed{background:var(--lapsed-bg);color:var(--lapsed)}.b-dev{background:var(--dev-bg);color:var(--dev)}.b-none{background:var(--none-bg);color:var(--ink3)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
 .card h2{font-size:15px;margin:0 0 12px;font-weight:650;display:flex;align-items:center;gap:8px}
@@ -521,11 +522,16 @@ const clientDate = c => { const ds = c.bookings.map(id => bookingById[id]).flatM
 // payment linked to the booking (dpOf), plus the single DP typed on the booking itself (old sheet data / pencil).
 const isRefunded = b => /^refunded/i.test(b.refunded || '');
 const isActiveBooking = b => !!b && (isConvertedBooking(b) || /hold/i.test(b.outcome || ''));
+// MOU section: "MOU" Opted / Not opted first; only when Opted: Payment plan (Fixed / Variable) and the six MOU boxes,
+// all typed by the admin (the MOU is separate from the down payment and is not added to Paid till now).
+const MOU_DET = ['mouPlan', 'mouNo', 'mouDate', 'mouReceived', 'mouRemaining', 'mouTenure', 'mouEmi'];
+const mouDone = b => !!b && b.mouOpted === 'Opted' && !!(b.mouDate || b.mouNo);
 // Why a plot can no longer be lapsed (null = it still can): once the MOU or the dastavej is done the sale is final.
 function docLock(c, b) {
   if (!b) return null; const ds = (c && c.docStatus) || '';
-  if ((b.plot && D.dastavej[b.plot]) || /dastavej done/i.test(ds) || /done & sent/i.test(b.dastavejStatus || '')) return 'the dastavej is done';
-  if (/^(mou done|dastavej)/i.test(ds) || /mou done/i.test(b.mou || '') || /done|office/i.test(b.dastavejStatus || '')) return 'the MOU is done';
+  const dv = b.plot && D.dastavej[b.plot]; // a dastavej record added in the CRM only counts once its date is filled in
+  if ((dv && (!dv.added || dv.date)) || /dastavej done/i.test(ds) || /done & sent/i.test(b.dastavejStatus || '')) return 'the dastavej is done';
+  if (/^(mou done|dastavej)/i.test(ds) || /mou done/i.test(b.mou || '') || mouDone(b) || /done|office/i.test(b.dastavejStatus || '')) return 'the MOU is done';
   return null;
 }
 const canLapse = (c, b) => isActiveBooking(b) && !docLock(c, b);
@@ -609,6 +615,8 @@ const OPTS = {
   yesNo: ['Yes', 'No'],
   loan: ['Loan Availed', 'Not Availed'],
   docStatus: DOC_OPTS,
+  mouOpted: ['Opted', 'Not opted'],
+  mouPlan: ['Fixed payment', 'Variable payment'],
   payStatus: ['Received', 'Cheque returned'],
   incType: ['Company', 'Personal'],
   noteKind: NOTE_KINDS
@@ -637,7 +645,7 @@ const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-w
 const PEN_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 const FIELD_LABELS = {date: 'Date', name: 'Name', phone: 'Phone', by: 'Agent', status: 'Status', extra: 'Note', remark: 'Remark', docStatus: 'Document status',
   holdDate: 'Hold date', holdAmount: 'Hold amount', holdMode: 'Hold mode', bookingAmount: 'Booking amount', bookingMode: 'Booking mode', refundAmount: 'Refund amount', refundMode: 'Refund mode', dpMode: 'DP mode', refunded: 'Refund', finalAmount: 'Final amount', dpAmount: 'DP amount', dpDate: 'DP date',
-  loan: 'Loan', loanBank: 'Bank', payName: 'Name', payRef: 'Reference no.', payBank: 'Bank name', loanAmount: 'Loan amount', emi: 'EMI', payment: 'Payment status', mou: 'MOU', dastavejStatus: 'Dastavej status', maintenanceCheque: 'Maintenance cheque', outcome: 'Booking status',
+  loan: 'Loan', loanBank: 'Bank', payName: 'Name', payRef: 'Reference no.', payBank: 'Bank name', loanAmount: 'Loan amount', emi: 'EMI', payment: 'Payment status', mou: 'MOU (old sheet)', mouOpted: 'MOU', mouPlan: 'Payment plan', mouNo: 'MOU number', mouDate: 'MOU date', mouReceived: 'MOU received till now', mouRemaining: 'MOU remaining amount', mouTenure: 'MOU tenure', mouEmi: 'MOU EMI', deliveryDate: 'Dastavej delivery date', dastavejStatus: 'Dastavej status', maintenanceCheque: 'Maintenance cheque', outcome: 'Booking status',
   client: 'Client name', onlineCheque: 'Online / cheque', cash: 'Cash', fy: 'Financial year', kind: 'Type', vakilAmount: 'Vakil fee', vakilDate: 'Vakil date', maintenanceAmount: 'Maintenance deposit', maintenanceDate: 'Deposit date',
   owner: 'Owner', plot: 'Plot', sqYard: 'Sq yard', saleValue: 'Total sale value', anjaneePaid: 'Anjanee paid', area: 'Area (sq yd)', note: 'Note', particulars: 'Particulars', for: 'For', type: 'Type', amount: 'Amount', method: 'Paid by', remarks: 'Remarks',
   text: 'Entry', mode: 'Mode', particular: 'Particular', advance: 'Advance', bookingDate: 'Booking date', final: 'Final incentive', pending: 'Pending', sellAmount: 'Sell amount', size: 'Size', slab: 'Slab'};
@@ -645,7 +653,8 @@ const fieldLabel = f => { const m = /^fu(\d)(Date|Note)$/.exec(f); if (m) return
 const FIELD_SECTIONS = {holdDate: 'Hold', holdAmount: 'Hold', holdMode: 'Hold',
   bookingDate: 'Booking', bookingAmount: 'Booking', bookingMode: 'Booking', payName: 'Booking', payRef: 'Booking', payBank: 'Booking',
   dpDate: 'Down payment (DP)', dpAmount: 'Down payment (DP)', dpMode: 'Down payment (DP)',
-  refundAmount: 'Refund', refundMode: 'Refund', loan: 'Loan', loanBank: 'Loan', loanAmount: 'Loan', emi: 'Loan'};
+  refundAmount: 'Refund', refundMode: 'Refund', loan: 'Loan', loanBank: 'Loan', loanAmount: 'Loan', emi: 'Loan',
+  mouOpted: 'MOU', mouPlan: 'MOU', mouNo: 'MOU', mouDate: 'MOU', mouReceived: 'MOU', mouRemaining: 'MOU', mouTenure: 'MOU', mouEmi: 'MOU'};
 // pencil form: each mode box with the proof boxes of the same record
 const detGroups = fields => fields.filter(x => (x.coll === 'bookings' && x.f === 'bookingMode') || (x.coll === 'payments' && x.f === 'mode'))
   .map(mf => ({mf, dets: fields.filter(x => x.coll === mf.coll && x.id === mf.id && DETAIL_FIELDS.includes(x.f))})).filter(g => g.dets.length);
@@ -737,7 +746,7 @@ document.addEventListener('click', e => {
   const delBtn = canDelete() && one.length === 1 && DELETABLE.includes(fields[0].coll) && !(fields[0].coll === 'clients' && location.hash.startsWith('#/client/'))
     ? `<button class="btn danger" type="button" data-dlgdel="${esc(one[0])}">Delete this ${fields[0].coll === 'visits' ? 'visit' : 'record'}</button>` : '';
   // booking fields are grouped under headings (Hold / Booking / …) so the two are never mixed up
-  const secOf = x => x.coll === 'bookings' ? FIELD_SECTIONS[x.f] || null : null;
+  const secOf = x => x.coll === 'bookings' ? FIELD_SECTIONS[x.f] || null : x.coll === 'dastavej' && fields.some(y => y.f === 'mouOpted') ? 'Dastavej' : null;
   const secs = [...new Set(fields.map(secOf))];
   const body = secs.length > 1 || secs[0] ? secs.map(sc => `${sc ? `<div class="sec2">${esc(sc)}</div>` : ''}<div class="g2">${fields.filter(x => secOf(x) === sc).map(x => x.html).join('')}</div>`).join('')
     : `<div class="g2">${fields.map(x => x.html).join('')}</div>`;
@@ -770,6 +779,11 @@ document.addEventListener('click', e => {
         lab.style.display = ds[x.f] ? '' : 'none'; if (ds[x.f]) lab.childNodes[0].textContent = ds[x.f]; });
       Object.keys(ds).forEach(f => { const x = dets.find(d => d.f === f); if (x) { const lab = $('#' + x.nm).closest('label'); lab.parentNode.appendChild(lab); } }); }; // in the mode's own order
     $('#' + mf.nm).addEventListener('change', () => sync(true)); sync(false); });
+  // MOU: the Payment plan and the six MOU boxes only show when MOU is "Opted"
+  const mo = fields.find(x => x.f === 'mouOpted' && x.coll === 'bookings');
+  if (mo) { const syncMou = () => { const on = $('#' + mo.nm).value === 'Opted';
+      fields.filter(x => x.coll === mo.coll && x.id === mo.id && MOU_DET.includes(x.f)).forEach(x => { $('#' + x.nm).closest('label').style.display = on ? '' : 'none'; }); };
+    $('#' + mo.nm).addEventListener('change', syncMou); syncMou(); }
 }, true);
 document.addEventListener('keydown', e => {
   if (!$('#dlg').firstChild) return;
@@ -1268,7 +1282,19 @@ V.client = id => {
     // right side, under MOU: refund and loan
     const rl = b ? `<div class="psub">Refund and loan</div>${kv3([['Refund', refund(b)], ['Refund amount', rf(b, 'refundAmount', 'money')], ['Refund mode', rf(b, 'refundMode', 'select', 'payMode')],
         ['Loan', ed('bookings', b, 'loan', 'select', 'loan') + (/avail/i.test(b.loan || '') && !/not/i.test(b.loan || '') || b.loanBank ? `<div style="font-weight:400;font-size:12.5px;margin-top:2px"><span class="muted">Bank: </span>${ed('bookings', b, 'loanBank')}</div>` : '')], ['Loan amount', ed('bookings', b, 'loanAmount', 'money')], ['EMI', ed('bookings', b, 'emi', 'money')]])}` : '';
-    const mou = b || d ? `<div class="psub">MOU and dastavej</div>${kv3([['MOU', b ? ed('bookings', b, 'mou') : '—'], ['Dastavej status', b ? ed('bookings', b, 'dastavejStatus') : d ? ed('dastavej', d, 'status') : '—'], ['Name on dastavej', d ? ed('dastavej', d, 'client') : '—'], ['Dastavej date', d ? ed('dastavej', d, 'date', 'date') : '—'], ['Online / cheque', d ? ed('dastavej', d, 'onlineCheque') : '—'], ['Cash', d ? ed('dastavej', d, 'cash') : '—']])}${!d && b && isConvertedBooking(b) && owned.includes(p) ? `<button class="btn small" style="margin:-4px 0 10px" data-mkrec="dastavej|${esc(p)}|${esc(id)}">+ Add dastavej details</button>` : ''}` : '';
+    // MOU and dastavej, one block with one pencil: "MOU" (Opted / Not opted) on its own line (+ Payment plan when
+    // Opted), then the six MOU boxes (only when Opted), then the dastavej row. When Not opted the MOU boxes stay in the
+    // page hidden, so the pencil can show them as soon as Opted is chosen.
+    const mOn = !!b && b.mouOpted === 'Opted';
+    const cell = (k, v, hide) => `<div class="kv"${hide ? ' style="display:none"' : ''}><small>${esc(k)}</small><div>${v}</div></div>`;
+    const sep = '<div class="mou-sep" style="grid-column:1/-1"></div>';
+    const mou = b || d ? `<div class="psub">MOU and dastavej</div><div class="grid2 g3 moub">${b ? [
+        cell('MOU', ed('bookings', b, 'mouOpted', 'select', 'mouOpted', b.mouOpted ? `<span class="badge ${mOn ? 'b-sold' : 'b-none'}">${esc(b.mouOpted)}</span>` : '<span class="muted">Not chosen</span>')),
+        cell('Payment plan', ed('bookings', b, 'mouPlan', 'select', 'mouPlan'), !mOn), '<div></div>',
+        mOn ? sep : '',
+        cell('MOU number', ed('bookings', b, 'mouNo'), !mOn), cell('MOU date', ed('bookings', b, 'mouDate', 'date'), !mOn), cell('MOU received till now', ed('bookings', b, 'mouReceived', 'money'), !mOn),
+        cell('MOU remaining amount', ed('bookings', b, 'mouRemaining', 'money'), !mOn), cell('MOU tenure', ed('bookings', b, 'mouTenure'), !mOn), cell('MOU EMI', ed('bookings', b, 'mouEmi', 'money'), !mOn)].join('') : ''}
+      ${sep}${cell('Dastavej delivery date', d ? ed('dastavej', d, 'deliveryDate', 'date') : '—')}${cell('Date of dastavej', d ? ed('dastavej', d, 'date', 'date') : '—')}${cell('Name on dastavej', d ? ed('dastavej', d, 'client') : '—')}</div>${!d && b && isConvertedBooking(b) && owned.includes(p) ? `<button class="btn small" style="margin:6px 0 10px" data-mkrec="dastavej|${esc(p)}|${esc(id)}">+ Add dastavej details</button>` : ''}` : '';
     return `<div class="card"><h2>Plot ${esc(p)} ${b ? ed('bookings', b, 'outcome', 'select', 'outcome', `<span class="badge ${isConvertedBooking(b) ? 'b-sold' : hold ? 'b-hold' : 'b-lapsed'}">${val(outcomeLabel(b))}</span>`) : ''}<span class="src">${pl && pl.area ? pl.area + ' sq yd' : ''}${b ? ' · booking Sr. ' + b.sr : ''}</span></h2>
     ${hold ? `<div class="acts"><span>This plot is on hold since ${fd(b.holdDate)}.${dpEntries(b).length ? ' DP paid: ' + inr(dpTotal(b)) + '.' : ''}</span><button class="btn primary small" data-flow="book" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Booked</button>${canLapse(c, b) ? `<button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Lapsed</button>` : ''}</div>` : ''}
     ${b && isConvertedBooking(b) ? (canLapse(c, b) ? `<div class="acts acts-n"><span>Booked. The client can still back out until the MOU is done.</span>${ROLE() !== 'Agent' ? `<button class="btn small" data-flow="lapse" data-bid="${esc(b.id)}" data-cid="${esc(id)}">Lapsed</button>` : '<span class="muted" style="flex:none">Only Admin or Super admin can lapse a booked plot.</span>'}</div>`
@@ -1345,7 +1371,7 @@ V.plot = no => {
   ${D.plots[no] ? `<div class="card"><h2>Plot <span class="src">Plot List sheet</span></h2>${kv([['Status', ed('plots', p, 'status', 'select', 'plotStatus', `<span class="badge ${pc[2]}">${pc[1]}</span>`)], ['Area (sq yd)', ed('plots', p, 'area', 'number')], ['Note', ed('plots', p, 'note')]])}</div>` : ''}
   ${owner ? `<div class="card"><h2>Client</h2><a class="folder" data-go="#/client/${owner.id}">${ico('users')}<div><b>${esc(owner.name)}</b><span>${esc(owner.phone || '')} · open client folder</span></div></a></div>` : ''}
   <div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Holds and bookings <span class="src">Booking list</span></h2>${bks.length ? `<table><thead><tr><th class="sr">Sr.</th><th>Client</th><th>Hold date</th><th>Outcome</th><th class="num">Finalised</th><th class="num">Down payment</th></tr></thead><tbody>${bks.map(b => `<tr class="click" data-go="#/client/${D.clients.find(c => c.bookings.includes(b.id)).id}"><td class="sr">${b.sr}</td><td>${val(b.client)}</td><td>${ed('bookings', b, 'holdDate', 'date')}</td><td>${ed('bookings', b, 'outcome', 'select', 'outcome', val(outcomeLabel(b)))}</td><td class="num">${ed('bookings', b, 'finalAmount', 'money')}</td><td class="num">${ed('bookings', b, 'dpAmount', 'money')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted" style="padding:0 10px">None.</p>'}</div>
-  ${d ? `<div class="card"><h2>Dastavej <span class="src">Dastavej sheet</span></h2>${kv([['Name on dastavej', ed('dastavej', d, 'client')], ['Date', ed('dastavej', d, 'date', 'date')], ['Financial year', ed('dastavej', d, 'fy')], ['Finalised amount', ed('dastavej', d, 'finalAmount', 'money')], ['Status', ed('dastavej', d, 'status')], ['Type', ed('dastavej', d, 'kind')]])}</div>` : pc[1] === 'Sold' && owner ? `<div class="card"><h2>Dastavej</h2><button class="btn small" data-mkrec="dastavej|${esc(no)}|${esc(owner.id)}">+ Add dastavej details</button></div>` : ''}
+  ${d ? `<div class="card"><h2>Dastavej <span class="src">Dastavej sheet</span></h2>${kv([['Name on dastavej', ed('dastavej', d, 'client')], ['Date of dastavej', ed('dastavej', d, 'date', 'date')], ['Dastavej delivery date', ed('dastavej', d, 'deliveryDate', 'date')], ['Financial year', ed('dastavej', d, 'fy')], ['Finalised amount', ed('dastavej', d, 'finalAmount', 'money')], ['Status', ed('dastavej', d, 'status')], ['Type', ed('dastavej', d, 'kind')]])}</div>` : pc[1] === 'Sold' && owner ? `<div class="card"><h2>Dastavej</h2><button class="btn small" data-mkrec="dastavej|${esc(no)}|${esc(owner.id)}">+ Add dastavej details</button></div>` : ''}
   ${r ? `<div class="card"><h2>Registry & maintenance <span class="src">Registry sheet</span></h2>${kv([['Vakil fee', ed('registry', r, 'vakilAmount', 'money')], ['Vakil date', ed('registry', r, 'vakilDate', 'date')], ['Maintenance', ed('registry', r, 'maintenanceAmount', 'money')], ['Deposit date', ed('registry', r, 'maintenanceDate', 'date')]])}</div>` : pc[1] === 'Sold' && owner ? `<div class="card"><h2>Registry & maintenance</h2><button class="btn small" data-mkrec="registry|${esc(no)}|${esc(owner.id)}">+ Add registry &amp; maintenance</button></div>` : ''}
   ${l ? `<div class="card"><h2>Sold plot register <span class="src">Sr. ${l.sr}</span></h2>${kv([['Owner', ed('landowners', l, 'owner')], ['Sq yard', ed('landowners', l, 'sqYard', 'number')], ['Total sale value', ed('landowners', l, 'saleValue', 'money')], ['Anjanee paid', ed('landowners', l, 'anjaneePaid', 'money')]])}</div>` : pc[1] === 'Sold' ? `<div class="card"><h2>Sold plot register</h2><button class="btn small" data-reg="${esc(no)}">+ Add to register</button></div>` : ''}
   ${pays.length ? `<div class="card" style="padding:12px 6px 4px"><h2 style="padding:0 10px">Payments mentioning this plot</h2><table><tbody>${pays.map(x => `<tr><td class="sr">${x.sr}</td><td>${ed('payments', x, 'date', 'date')}</td><td>${ed('payments', x, 'text')}</td><td>${ed('payments', x, 'status', 'select', 'payStatus', payBadge(x))}</td><td class="num">${amtCell(x, ed('payments', x, 'amount', 'money'))}</td></tr>`).join('')}</tbody></table></div>` : ''}
@@ -1475,7 +1501,7 @@ function mkDocRec(kind, no, cid) {
   if (D[kind][no]) return openPenFor(kind, no);
   const c = clientById[cid] || (plotOwner[no] && clientById[plotOwner[no]]), b = (plotBk[no] || {}).conv;
   const o = kind === 'dastavej'
-    ? {id: String(no), plot: String(no), client: c ? c.name : null, date: null, fy: null, finalAmount: b ? b.finalAmount ?? null : null, onlineCheque: null, cash: null, status: null, kind: 'SALE', trpl: D.plots[no] && D.plots[no].trpl || null, added: true}
+    ? {id: String(no), plot: String(no), client: c ? c.name : null, deliveryDate: null, date: null, fy: null, finalAmount: b ? b.finalAmount ?? null : null, onlineCheque: null, cash: null, status: null, kind: 'SALE', trpl: D.plots[no] && D.plots[no].trpl || null, added: true}
     : {id: String(no), plot: String(no), client: c ? c.name : null, vakilAmount: null, vakilDate: null, vakilMode: null, maintenanceAmount: null, maintenanceDate: null, maintenanceMode: null, added: true};
   D[kind][no] = o;
   saveRecs([[kind, o]], {what: kind === 'dastavej' ? 'Dastavej details added' : 'Registry & maintenance added', label: 'Plot ' + no, cid: c ? c.id : null}, 'Added for plot ' + no + '. Fill in the details.', null, () => openPenFor(kind, no));

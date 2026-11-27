@@ -29,7 +29,28 @@ async function ensureSchema(env) {
   await migrateBookingAmounts(env);
   await migrateConvertedToBooked(env);
   await migratePayModes(env);
+  await migrateMouOpted(env);
   schemaReady = true;
+}
+
+// One-time change (Nov 2026): the MOU section starts with "MOU: Opted / Not opted". Bookings whose old MOU column
+// (or dastavej status) already mentions the MOU are marked Opted; the rest are left for the admin to choose.
+async function migrateMouOpted(env) {
+  const done = await env.DB.prepare("SELECT value FROM meta WHERE key = 'migr_mou_opted'").first('value');
+  if (done) return;
+  const rows = await env.DB.prepare("SELECT id, data FROM records WHERE coll = 'bookings'").all();
+  const stmts = [];
+  for (const r of rows.results) {
+    const b = JSON.parse(r.data);
+    if (b.mouOpted || !(/mou/i.test(b.mou || '') || /mou/i.test(b.dastavejStatus || ''))) continue;
+    b.mouOpted = 'Opted';
+    stmts.push(env.DB.prepare("UPDATE records SET data = ?, updated_by = 'update' WHERE coll = 'bookings' AND id = ?").bind(JSON.stringify(b), b.id));
+  }
+  for (let i = 0; i < stmts.length; i += 100) await env.DB.batch(stmts.slice(i, i + 100));
+  await env.DB.batch([
+    env.DB.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('migr_mou_opted', ?)").bind(String(stmts.length)),
+    env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'")
+  ]);
 }
 
 // One-time change (Nov 2026): payment modes "Online" and "UPI" are merged into "UPI / Online", and the booking's
@@ -197,8 +218,9 @@ async function lapseRefusal(env, cur, next, getRec) {
   let client = cur.cid ? await getRec('clients', cur.cid) : null;
   if (!client) { const r = await env.DB.prepare("SELECT data FROM records WHERE coll = 'clients' AND data LIKE ?").bind('%"' + cur.id + '"%').first(); client = r ? JSON.parse(r.data) : null; }
   const ds = String((client && client.docStatus) || ''), dv = cur.plot ? await getRec('dastavej', String(cur.plot)) : null;
-  if (dv || /dastavej done/i.test(ds) || /done & sent/i.test(cur.dastavejStatus || '')) return 'This plot cannot be lapsed: the dastavej is done.';
-  if (/^(mou done|dastavej)/i.test(ds) || /mou done/i.test(cur.mou || '') || /done|office/i.test(cur.dastavejStatus || '')) return 'This plot cannot be lapsed: the MOU is done.';
+  // a dastavej record added in the CRM only counts once its date is filled in
+  if ((dv && (!dv.added || dv.date)) || /dastavej done/i.test(ds) || /done & sent/i.test(cur.dastavejStatus || '')) return 'This plot cannot be lapsed: the dastavej is done.';
+  if (/^(mou done|dastavej)/i.test(ds) || /mou done/i.test(cur.mou || '') || (cur.mouOpted === 'Opted' && (cur.mouDate || cur.mouNo)) || /done|office/i.test(cur.dastavejStatus || '')) return 'This plot cannot be lapsed: the MOU is done.';
   return null;
 }
 function lockError(user, coll, current, next) {
