@@ -323,6 +323,51 @@ th,th.num{white-space:normal;vertical-align:bottom;min-width:40px}th.pcell{min-w
   .dlg .df{padding:12px 18px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -8px 20px rgba(40,25,10,.05)}
   .dlg .df .btn{min-height:52px}.dlg .df .btn.ghost{flex:0 0 auto}.dlg .df .btn.primary{flex:1}
 }
+
+/* ===== phones: lists as cards (27 Nov 2026) — one card per row, filters as a strip of chips on top ===== */
+@media (max-width:640px){
+  .tablecard{background:none!important;border:none!important;box-shadow:none!important;padding:0!important}
+  .tablecard .tscroll{overflow:visible;background:none}
+  .tablecard table{display:block;min-width:0!important;font-size:14px}
+  .tablecard thead{display:block}
+  .tablecard thead tr{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 12px;scrollbar-width:none}
+  .tablecard thead tr::-webkit-scrollbar{display:none}
+  .tablecard thead tr::before{content:"Sort / filter";flex:none;align-self:center;font-size:12px;font-weight:600;color:var(--ink3)}
+  .tablecard th{display:flex;flex:none;align-items:center;border:1px solid var(--line2)!important;border-radius:999px;background:var(--panel);padding:5px 6px 5px 12px!important;font-size:12.5px;text-transform:none;letter-spacing:0;color:var(--ink2);min-width:0!important;white-space:nowrap}
+  .tablecard th .th{display:flex;align-items:center;gap:4px}
+  .tablecard th:not(:has(.fbtn)){display:none}
+  .tablecard tbody{display:grid;gap:10px}
+  .tablecard tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 15px;box-shadow:0 1px 3px rgba(60,40,20,.05)}
+  .tablecard tbody tr.click:active{transform:scale(.99);background:#fcfaf7}
+  .tablecard tbody tr.click:hover td{background:none}
+  .tablecard td{display:block;padding:0!important;border:none!important;text-align:left!important;min-width:0;overflow-wrap:anywhere;font-size:14px;white-space:normal}
+  .tablecard td::before{content:attr(data-l);display:block;font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--ink3);margin-bottom:2px}
+  .tablecard td.blank,.tablecard td[data-l=""]::before{display:none}
+  .tablecard td.sr{order:-3;grid-column:1/-1;font-size:12px;color:var(--ink3);margin-bottom:-8px}
+  .tablecard td.sr::before{display:inline;content:"Sr. ";font-size:12px;text-transform:none;letter-spacing:0;font-weight:500}
+  .tablecard td.c-ttl{order:-2;grid-column:1/-1;font-size:17px;font-weight:700;color:var(--ink);line-height:1.25;padding-right:34px!important}
+  .tablecard td.c-ttl::before{display:none}
+  .tablecard td.c-st{order:-1;grid-column:1/-1;margin-top:-4px}
+  .tablecard td.c-st::before{display:none}
+  .tablecard td.c-wide{grid-column:1/-1;background:#faf7f3!important;border-radius:10px;padding:9px 11px!important}
+  .tablecard td.c-act{order:9;grid-column:1/-1;display:flex;justify-content:flex-end;align-items:center;gap:8px;border-top:1px solid var(--line)!important;padding-top:10px!important;margin-top:2px}
+  .tablecard td.c-act::before{display:none}
+  .tablecard td.c-act:empty,.tablecard td.c-act.blank{display:none}
+  .tablecard td.pcell{order:8;position:absolute;width:auto!important}
+  .tablecard tbody tr{position:relative}
+  .tablecard td.pcell{top:12px;right:10px}
+  .tablecard tfoot td.pcell,.tablecard thead th.pcell{display:none}
+  .tablecard tbody td[colspan]{grid-column:1/-1;text-align:center!important}
+  .tablecard td.num{font-variant-numeric:tabular-nums;font-weight:600}
+  .tablecard td.c-wide *{min-width:0;max-width:100%}.tablecard .rmk{flex:1}.tablecard .rmk>div{white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
+  .tablecard td.c-amt{font-size:16.5px;font-weight:700;color:var(--ink)}
+  .tablecard tfoot{display:block;margin-top:10px}
+  .tablecard tfoot tr{display:flex;flex-wrap:wrap;gap:6px 16px;background:var(--accent-bg);border-radius:14px;padding:12px 15px}
+  .tablecard tfoot td{display:block;padding:0!important;border:none!important;text-align:left!important;font-weight:700}
+  .tablecard tfoot td.blank{display:none}
+  .tablecard tfoot td.ftl{flex-basis:100%;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--accent)}
+  .tablecard tfoot td:not(.ftl)::before{content:attr(data-l);display:block;font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase}
+}
 </style>
 </head>
 <body>
@@ -740,7 +785,7 @@ function ed(coll, o, f, kind = 'text', opt = '', shown) {
   if (isAgent() && coll !== 'visits') return `<span class="ro">${disp}</span>`; // view only: no pencil
   const lock = lockReason(coll, o, f);
   const edited = editedSet.has(coll + '|' + o.id + '|' + f);
-  return `<span class="ed${lock ? ' locked' : ''}${edited ? ' edited' : ''}" data-e="${esc(coll)}|${esc(o.id)}|${esc(f)}|${kind}|${opt}"${lock ? ` data-lock="${esc(lock)}"` : ''}>${disp}${lock ? `<span class="lock">${/linked to a client/.test(lock) ? 'from folder' : 'locked'}</span>` : ''}</span>`;
+  return `<span class="ed${lock ? ' locked' : ''}${edited ? ' edited' : ''}" data-e="${esc(coll)}|${esc(o.id)}|${esc(f)}|${kind}|${opt}"${lock ? ` data-lock="${esc(lock)}" title="${esc(lock)}"` : ''}>${disp}</span>`; // no "locked" / "from folder" tag (owner): the pencil form says why
 }
 const PEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
 const PEN_LOCK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
@@ -949,6 +994,14 @@ function cmpBy(c) {
 }
 const FUNNEL = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></svg>';
 let EXPORT_ALL = false;
+// phones: every list row becomes a card (CSS below). The card's title, status badge, long text and buttons are picked by column.
+function markBlankCells(root) { root.querySelectorAll('.tablecard tbody td:not(.blank):not(.pcell)').forEach(td => { if (!td.querySelector('button, a, input, .badge') && /^[—\s-]*$/.test(td.textContent)) td.classList.add('blank'); }); }
+function cardRoles(cols) {
+  const r = {}; const t = ['name', 'client', 'no', 'label', 'username', 'part', 'text', 'who'].map(k => cols.find(c => c.k === k)).find(Boolean) || cols.find(c => c.k !== 'sr'); if (t) r[t.k] = 'c-ttl';
+  cols.forEach(c => { if (r[c.k]) return; if (['status', 'st', 'active'].includes(c.k)) r[c.k] = 'c-st'; else if (['remark', 'rem', 'text', 'note', 'det', 'part', 'et', 'reg'].includes(c.k)) r[c.k] = 'c-wide'; else if (c.k === 'act' || c.label === '') r[c.k] = 'c-act'; else if (c.type === 'money' && ['amt', 'amount', 'final', 'paid'].includes(c.k)) r[c.k] = 'c-amt'; });
+  return r;
+}
+const isBlankCell = h => h === '' || h === '<span class="muted">—</span>' || h === '—';
 function tbl(key, cols, rows, opt = {}) {
   const st = CF[key] = CF[key] || {f: {}, sort: null, limit: opt.limit || 0};
   TABLES[key] = {cols, rows};
@@ -960,8 +1013,10 @@ function tbl(key, cols, rows, opt = {}) {
   const lim = st.limit || Infinity;
   const head = cols.map(c => { const on = isActive(st.f[c.k]); const so = st.sort && st.sort.col === c.k ? (st.sort.dir > 0 ? ' ↑' : ' ↓') : '';
     return `<th class="${c.type === 'num' || c.type === 'money' ? 'num' : ''}${c.k === 'sr' ? ' sr' : ''}"><span class="th">${esc(c.label)}${so}${c.nofilter ? '' : `<button class="fbtn${on ? ' on' : ''}" data-cf="${key}|${c.k}" title="Sort and filter">${FUNNEL}</button>`}</span></th>`; }).join('');
-  const body = shown.slice(0, lim).map(r => `<tr${opt.rowGo ? ` class="click" data-go="${opt.rowGo(r)}"` : ''}>${cols.map(c => `<td class="${c.type === 'num' || c.type === 'money' ? 'num' : ''}${c.k === 'sr' ? ' sr' : ''}">${c.cell ? c.cell(r) : c.type === 'date' ? fd(c.get(r)) : c.type === 'money' ? inr(c.get(r)) : val(c.get(r))}</td>`).join('')}</tr>`).join('');
-  const foot = opt.totals ? `<tfoot><tr>${cols.map((c, i) => `<td class="${c.type === 'money' ? 'num' : ''}">${i === 0 ? '' : opt.totals.includes(c.k) ? inr(shown.filter(c.totalIf || opt.totalIf || (() => true)).reduce((s, r) => s + (Number(c.get(r)) || 0), 0)) : i === 1 ? 'Total' : ''}</td>`).join('')}</tr></tfoot>` : '';
+  const roles = cardRoles(cols);
+  const body = shown.slice(0, lim).map(r => `<tr${opt.rowGo ? ` class="click" data-go="${opt.rowGo(r)}"` : ''}>${cols.map(c => { const h = c.cell ? c.cell(r) : c.type === 'date' ? fd(c.get(r)) : c.type === 'money' ? inr(c.get(r)) : val(c.get(r));
+    return `<td class="${c.type === 'num' || c.type === 'money' ? 'num' : ''}${c.k === 'sr' ? ' sr' : ''} ${roles[c.k] || ''}${isBlankCell(h) ? ' blank' : ''}" data-l="${esc(c.label)}">${h}</td>`; }).join('')}</tr>`).join('');
+  const foot = opt.totals ? `<tfoot><tr>${cols.map((c, i) => `<td class="${c.type === 'money' ? 'num' : ''}${i === 1 ? ' ftl' : opt.totals.includes(c.k) ? '' : ' blank'}" data-l="${esc(c.label)}">${i === 0 ? '' : opt.totals.includes(c.k) ? inr(shown.filter(c.totalIf || opt.totalIf || (() => true)).reduce((s, r) => s + (Number(c.get(r)) || 0), 0)) : i === 1 ? 'Total' : ''}</td>`).join('')}</tr></tfoot>` : '';
   TABLES[key] = {cols, shown, rows: opt.order ? [...rows].sort(opt.order) : rows, title: opt.title};
   const exp = canExport() ? `<span class="exp">Export ${anyF ? 'these ' + shown.length : ''}: <a data-exp="${key}" data-fmt="xlsx">Excel</a> · <a data-exp="${key}" data-fmt="csv">CSV</a></span>` : '';
   const meta = `<div class="tmeta">${anyF ? `Showing <b>${shown.length}</b> of ${rows.length} · <a data-cfclear="${key}">Clear filters and sort</a>` : `${rows.length} ${opt.noun || 'rows'}`}${exp}</div>`;
@@ -2029,7 +2084,7 @@ function render() {
   const active = document.activeElement; const restore = active && active.dataset && active.dataset.f ? [active.dataset.f, active.selectionStart] : null;
   $('#view').innerHTML = html;
   if (isAgent()) agentViewOnly(v);
-  addPencils($('#view'));
+  addPencils($('#view')); markBlankCells($('#view'));
   $('#view').querySelectorAll('table').forEach(tb => { if (tb.closest('.tscroll, .dpop')) return; const w = document.createElement('div'); w.className = 'tscroll'; tb.parentNode.insertBefore(w, tb); w.appendChild(tb); });
   if (restore) { const el = document.querySelector(`[data-f="${restore[0]}"]`); if (el) { el.focus(); try { el.setSelectionRange(restore[1], restore[1]); } catch (x) {} } }
 }
