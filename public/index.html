@@ -267,6 +267,62 @@ th,th.num{white-space:normal;vertical-align:bottom;min-width:40px}th.pcell{min-w
 @keyframes sheet{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}
 /* touch screens: bigger targets for pencils and small buttons */
 @media (pointer:coarse){.pen{width:30px;height:30px;opacity:.6}.btn{min-height:36px}.tmeta a{display:inline-block;padding:6px 2px}}
+
+/* ===== forms, modern look (27 Nov 2026): soft filled boxes, ₹ inside money boxes, payment mode as tiles ===== */
+.dlg{border-radius:22px;box-shadow:0 24px 70px rgba(40,25,10,.28),0 2px 6px rgba(40,25,10,.08)}
+.dlg .grab{display:none}
+.dlg{display:flex;flex-direction:column;overflow:hidden}.dlg .dh,.dlg .df,.dlg .grab{flex:none}.dlg .db{overflow:auto;flex:1 1 auto;min-height:0}
+.dlg .dh{border-bottom:none;padding:20px 22px 6px;align-items:center}
+.dlg .dh h3{font-size:19px;font-weight:700;letter-spacing:-.01em}.dlg .dh small{font-size:13px;color:var(--ink3);margin-top:2px}
+.dlg .dx{width:34px;height:34px;border-radius:50%;background:#f3efe9;color:var(--ink2);font-size:20px;display:grid;place-items:center;flex:none;transition:background .15s}
+.dlg .dx:hover{background:#e9e3da}
+.dlg .db{padding:14px 22px 18px;gap:16px}
+.dlg label{font-size:12.5px;font-weight:600;color:var(--ink2);gap:7px}
+.dlg input,.dlg select,.dlg textarea{min-height:46px;padding:11px 14px;border-radius:12px;border:1.5px solid transparent;background:#f5f1eb;font-size:14.5px;transition:border-color .15s,background .15s,box-shadow .15s;width:100%;min-width:0}
+.dlg textarea{min-height:80px}
+.dlg input[type=checkbox],.dlg input[type=radio]{min-height:0;width:auto}
+.dlg input::placeholder,.dlg textarea::placeholder{color:#aaa397}
+.dlg input:hover,.dlg select:hover,.dlg textarea:hover{background:#f0ebe3}
+.dlg input:focus,.dlg select:focus,.dlg textarea:focus{outline:none;background:#fff;border-color:var(--accent);box-shadow:0 0 0 4px rgba(138,90,43,.12)}
+.dlg input:disabled,.dlg select:disabled{opacity:.55}
+.dlg select{appearance:none;-webkit-appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238d8a82' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+.dlg .money{position:relative;display:block}
+.dlg .money::before{content:"₹";position:absolute;left:14px;top:23px;transform:translateY(-50%);color:var(--ink3);font-weight:600;pointer-events:none}
+.dlg .money input{padding-left:30px;font-variant-numeric:tabular-nums}
+.dlg .amtw{font-weight:600;margin-top:5px}
+.dlg .hero .money::before{font-size:24px;left:16px;top:32px;color:var(--accent)}
+.dlg .hero input{min-height:64px;font-size:28px;font-weight:700;padding-left:40px;letter-spacing:-.01em;background:#faf6f0}
+.dlg .vh{position:absolute!important;width:1px!important;height:1px!important;min-height:0!important;padding:0!important;border:0!important;opacity:0;pointer-events:none;overflow:hidden}
+.dlg label:has(> select[data-mode]),.dlg label:has(> .modes){grid-column:1/-1;position:relative}
+.dlg .modes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.dlg .modes button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-height:64px;padding:9px 6px;border-radius:14px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink2);transition:all .15s;line-height:1.15;text-align:center}
+.dlg .modes button .ico{width:20px;height:20px;stroke-width:1.6}
+.dlg .modes button:hover{border-color:var(--line2);background:#fcfaf7}
+.dlg .modes button.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent);box-shadow:0 0 0 3px rgba(138,90,43,.10)}
+.dlg select[data-mode]:disabled + .modes{opacity:.55;pointer-events:none}
+.dlg .mdet{background:#faf7f3;border:1px solid var(--line);border-radius:14px;padding:12px 14px 14px;gap:12px}
+.dlg .mdet:empty{display:none}
+.dlg .mdet::before{content:"Payment proof";grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);margin-bottom:-4px}
+.dlg .mdet input{background:#fff;border-color:var(--line)}
+.dlg .chip{padding:8px 15px;font-weight:550;transition:all .15s}
+.dlg .chip:hover{border-color:var(--ink3)}
+.dlg .sec{color:var(--ink3);font-size:11px;font-weight:700}
+.dlg .df{border-top:1px solid var(--line);padding:14px 22px 18px;gap:10px;align-items:center}
+.dlg .df .btn{min-height:46px;padding:0 22px;border-radius:12px;font-size:14.5px;font-weight:650;display:inline-flex;align-items:center;justify-content:center}
+.dlg .df .btn.ghost{background:#f3efe9;border-color:transparent;color:var(--ink2)}.dlg .df .btn.ghost:hover{background:#e9e3da}
+.dlg .df .btn.primary{box-shadow:0 6px 16px rgba(138,90,43,.28)}.dlg .df .btn.primary:hover{filter:brightness(1.08)}
+.dlg .err:empty{display:none}
+.dlg .err{background:var(--lapsed-bg);border-radius:10px;padding:9px 12px;margin:0;font-weight:550}
+@media (max-width:640px){
+  .dbg{background:rgba(25,18,10,.45);backdrop-filter:blur(2px)}
+  .dlg .grab{display:block;width:40px;height:5px;border-radius:3px;background:#d9d2c7;margin:9px auto 0;flex:none}
+  .dlg .dh{padding:10px 18px 4px}
+  .dlg .db{padding:12px 18px 18px}
+  .dlg input,.dlg select,.dlg textarea{min-height:50px;font-size:16px}
+  .dlg .hero input{min-height:66px;font-size:30px}
+  .dlg .df{padding:12px 18px calc(14px + env(safe-area-inset-bottom));box-shadow:0 -8px 20px rgba(40,25,10,.05)}
+  .dlg .df .btn{min-height:52px}.dlg .df .btn.ghost{flex:0 0 auto}.dlg .df .btn.primary{flex:1}
+}
 </style>
 </head>
 <body>
@@ -745,9 +801,9 @@ function amtHint(t) {
 }
 document.addEventListener('input', e => { if (e.target.classList && e.target.classList.contains('amt')) amtHint(e.target); });
 const openDlg = (title, subtitle, body, saveLabel, onSave, wide) => {
-  $('#dlg').innerHTML = `<div class="dbg" data-dlgbg><div class="dlg${wide ? ' wide' : ''}" role="dialog" aria-modal="true"><div class="dh"><div><h3>${title}</h3>${subtitle ? `<small>${subtitle}</small>` : ''}</div><button class="dx" data-dlgclose aria-label="Close">×</button></div>
-  <div class="db">${body}<div class="err" id="dlg_err"></div></div><div class="df"><button class="btn" data-dlgclose>Cancel</button><button class="btn primary" data-dlgok>${saveLabel}</button></div></div></div>`;
-  dlgSave = onSave; document.querySelectorAll('#dlg .amt').forEach(amtHint); document.querySelectorAll('#dlg select[data-mode]').forEach(renderDet); const f = $('#dlg').querySelector('input,select,textarea'); if (f) { f.focus(); if (f.select && f.type !== 'date') try { f.select(); } catch (x) {} }
+  $('#dlg').innerHTML = `<div class="dbg" data-dlgbg><div class="dlg${wide ? ' wide' : ''}" role="dialog" aria-modal="true"><i class="grab"></i><div class="dh"><div><h3>${title}</h3>${subtitle ? `<small>${subtitle}</small>` : ''}</div><button class="dx" data-dlgclose aria-label="Close">×</button></div>
+  <div class="db">${body}<div class="err" id="dlg_err"></div></div><div class="df"><button class="btn ghost" data-dlgclose>Cancel</button><button class="btn primary" data-dlgok>${saveLabel}</button></div></div></div>`;
+  dlgSave = onSave; document.querySelectorAll('#dlg .amt').forEach(amtHint); document.querySelectorAll('#dlg select[data-mode]').forEach(renderDet); prettyForm($('#dlg')); const f = $('#dlg').querySelector('input,select,textarea'); if (f) { f.focus(); if (f.select && f.type !== 'date') try { f.select(); } catch (x) {} }
 };
 document.addEventListener('click', e => {
   const t = e.target;
@@ -1084,6 +1140,16 @@ function addAgentChip(inp) {
 const chipVals = group => [...document.querySelectorAll(`#dlg .chips[data-group="${group}"] .chip.on`)].map(c => c.dataset.chip);
 const freePlots = () => Object.values(D.plots).filter(p => plotClass(p)[1] === 'Unsold').sort((a, b) => a.sr - b.sr);
 const modeSel = (idn, on) => `<select id="${idn}" data-mode>${OPTS.payMode.map(m => `<option ${m === on ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>`;
+// forms: ₹ inside every money box, and the payment mode as tap tiles (the <select> stays underneath and is what gets saved)
+const MODE_ICO = {cash: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v5M18 9.5v5"/>', upi: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/>', cheque: '<rect x="2.5" y="5.5" width="19" height="13" rx="2"/><path d="M6 10h7M6 14h4M14.5 14.5l4-4"/>', bank: '<path d="M3 9.5 12 4l9 5.5M5 10v7M9.5 10v7M14.5 10v7M19 10v7M3 20h18"/>', other: '<circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/>'};
+const modeIco = m => { const k = /cash/i.test(m) ? 'cash' : /upi|online/i.test(m) ? 'upi' : /cheq/i.test(m) ? 'cheque' : /neft|rtgs/i.test(m) ? 'bank' : 'other'; return `<svg class="ico" viewBox="0 0 24 24">${MODE_ICO[k]}</svg>`; };
+function syncTiles(sel) { const t = sel.parentNode.querySelector(':scope > .modes'); if (t) t.querySelectorAll('[data-modetile]').forEach(b => b.classList.toggle('on', b.dataset.modetile === sel.value)); }
+function prettyForm(root) {
+  root.querySelectorAll('input.amt').forEach(i => { if (!i.parentNode.classList.contains('money')) { const w = document.createElement('span'); w.className = 'money'; i.before(w); w.appendChild(i); const h = w.nextElementSibling; if (h && h.classList.contains('amtw')) w.appendChild(h); } });
+  root.querySelectorAll('select[data-mode]').forEach(sel => { if (sel.parentNode.querySelector(':scope > .modes')) return; sel.classList.add('vh');
+    sel.insertAdjacentHTML('afterend', `<div class="modes" role="radiogroup">${[...sel.options].map(o => `<button type="button" role="radio" data-modetile="${esc(o.value)}">${modeIco(o.value)}<span>${esc(o.value)}</span></button>`).join('')}</div>`); syncTiles(sel); });
+}
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-modetile]'); if (!b) return; e.stopPropagation(); const sel = b.parentNode.parentNode.querySelector(':scope > select[data-mode]'); if (!sel || sel.disabled) return; sel.value = b.dataset.modetile; sel.dispatchEvent(new Event('change', {bubbles: true})); }, true);
 // the proof boxes for the chosen mode, shown right under the row with the mode box; ids <mode box id>_payRef etc.
 function renderDet(sel) {
   const row = sel.closest('.g2') || sel.parentNode; let box = row.querySelector(':scope > .mdet[data-for="' + sel.id + '"]');
@@ -1091,7 +1157,7 @@ function renderDet(sel) {
   box.innerHTML = detailsFor(sel.value).map(([f, l, ph]) => `<label>${esc(l)}<input id="${sel.id}_${f}" data-f="${f}" placeholder="${esc(ph)}"></label>`).join('');
 }
 const modeVals = idn => Object.fromEntries(DETAIL_FIELDS.map(f => { const i = document.getElementById(idn + '_' + f); return [f, i && i.value.trim() || null]; }));
-document.addEventListener('change', e => { if (e.target.matches && e.target.matches('select[data-mode]')) renderDet(e.target); });
+document.addEventListener('change', e => { if (e.target.matches && e.target.matches('select[data-mode]')) { renderDet(e.target); syncTiles(e.target); } });
 const today = () => new Date().toISOString().slice(0, 10);
 const stamp = () => Date.now().toString(36);
 function runFlow(f, msg, go) {
@@ -1187,7 +1253,7 @@ function flowDlg(ds) {
   } else if (ds.flow === 'dp') {
     const b = bookingById[ds.bid]; const c = clientById[ds.cid]; const n = dpEntries(b).length;
     openDlg('Add DP · plot ' + esc(b.plot || ''), esc(c.name) + (n ? ' · DP so far ' + inr(dpTotal(b)) + ' in ' + n + ' payment' + (n > 1 ? 's' : '') : ' · first down payment'), `
-    <div class="g2"><label>DP amount *<input id="fd_amt" type="text" inputmode="numeric" class="amt" autocomplete="off"></label><label>DP date *<input id="fd_date" type="date" value="${today()}"></label></div>
+    <label class="hero">DP amount *<input id="fd_amt" ${AMT_ATTR} placeholder="0"></label><div class="g2"><label>DP date *<input id="fd_date" type="date" value="${today()}"></label></div>
     <div class="g2"><label>DP mode${modeSel('fd_mode', 'Cheque')}</label><label>Note<input id="fd_note" placeholder="e.g. 3rd instalment (optional)"></label></div>
     <div class="note" style="margin:0">Saved as a payment of this client, so it counts in Paid till now.</div>`, 'Save DP', () => {
       const amount = num('#fd_amt'); if (!amount) return err('Enter the DP amount.'); if (!$('#fd_date').value) return err('Enter the DP date.');
@@ -1198,8 +1264,9 @@ function flowDlg(ds) {
   } else if (ds.flow === 'pay') {
     const c = clientById[ds.cid]; const plots = clientPlots(c);
     openDlg('Add payment', esc(c.name), `
-    <div class="g2"><label>Amount *<input id="fp_amt" type="text" inputmode="numeric" class="amt" autocomplete="off"></label><label>Date *<input id="fp_date" type="date" value="${today()}"></label></div>
-    <div class="g2"><label>Paid by${modeSel('fp_mode', 'Cheque')}</label><label>For plot<select id="fp_plot">${plots.length > 1 ? '<option value="">All plots / not specific</option>' : ''}${plots.map(p => `<option ${clientSel[c.id] === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label></div>
+    <label class="hero">Amount *<input id="fp_amt" ${AMT_ATTR} placeholder="0"></label>
+    <div class="g2"><label>Date *<input id="fp_date" type="date" value="${today()}"></label><label>For plot<select id="fp_plot">${plots.length > 1 ? '<option value="">All plots / not specific</option>' : ''}${plots.map(p => `<option ${clientSel[c.id] === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}</select></label></div>
+    <div class="g2"><label>Paid by${modeSel('fp_mode', 'Cheque')}</label></div>
     <label>Note<input id="fp_note" placeholder="e.g. 2nd instalment (optional)"></label>`, 'Save payment', () => {
       const amount = num('#fp_amt'); if (!amount) return err('Enter the amount.'); if (!$('#fp_date').value) return err('Enter the date.');
       const plot = $('#fp_plot').value || null; const note = $('#fp_note').value.trim() || null;
