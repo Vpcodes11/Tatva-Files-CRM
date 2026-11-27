@@ -60,7 +60,7 @@ h1{font-size:22px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
 .chip.diff{border-color:#d5caef;color:var(--diff)}.chip.diff.on{background:var(--diff);color:#fff;border-color:var(--diff)}
 .badge{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .b-sold{background:var(--sold-bg);color:var(--sold)}.b-hold{background:var(--hold-bg);color:var(--hold)}
-.mou-sep{border-top:1px dashed var(--line);margin:2px 0 10px}
+.dlg label.off{opacity:.45}.mou-sep{border-top:1px dashed var(--line);margin:2px 0 10px}.moub .kv.off{opacity:.45;cursor:not-allowed}
 .b-lapsed{background:var(--lapsed-bg);color:var(--lapsed)}.b-dev{background:var(--dev-bg);color:var(--dev)}.b-none{background:var(--none-bg);color:var(--ink3)}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
 .card h2{font-size:15px;margin:0 0 12px;font-weight:650;display:flex;align-items:center;gap:8px}
@@ -166,7 +166,7 @@ td.pcell,th.pcell{width:30px;padding-left:0!important;padding-right:6px!importan
 .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
-.stat small{color:var(--ink3);font-size:12px}.stat div{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums}
+.stat small{color:var(--ink3);font-size:12px}.stat div{font-size:20px;font-weight:650;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .tmeta .exp{float:right;color:var(--ink3)}.tmeta .exp a{cursor:pointer;color:var(--accent);font-weight:600}
 .danger{color:var(--lapsed)!important;border-color:#e7c9c4!important}
 .dlg .df .left{margin-right:auto}
@@ -225,8 +225,16 @@ th,th.num{white-space:normal;vertical-align:bottom;min-width:40px}th.pcell{min-w
 @media (max-width:1280px){.app{grid-template-columns:200px 1fr}}
 @media (max-width:900px){.app{grid-template-columns:1fr}aside{padding:10px 10px 6px;border-right:none;border-bottom:1px solid var(--line)}
   .nav{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}.nav .navlabel{display:none}.nav a{white-space:nowrap;flex:none;padding:6px 10px}
-  h1{font-size:22px}.stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}.kv,.grid2{grid-template-columns:1fr 1fr!important}}
-@media (max-width:480px){.kv,.grid2{grid-template-columns:1fr!important}td,th{padding:6px 5px}.tmeta .exp{float:none;display:block;margin-top:4px}}
+  h1{font-size:22px}.grid2:not(.g3){grid-template-columns:1fr 1fr!important}}
+/* plot card: when its two halves stack (laptops and smaller), a line separates Hold and booking from MOU and dastavej */
+@media (max-width:1250px){.pcols>div+div{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}}
+/* phones and small tablets: wide tables scroll sideways instead of squeezing every column to a few letters */
+@media (max-width:700px){.tscroll>table{min-width:560px}.card{padding:14px 14px}}
+/* phones: field boxes stay in rows of 3 (plot card) / 2 (other cards); smaller numbers so ₹ amounts fit their box */
+@media (max-width:480px){.grid2:not(.g3){grid-template-columns:1fr 1fr!important}.grid2.g3{gap:10px 10px}.kv small{font-size:11px}.kv div{font-size:13px;overflow-wrap:anywhere}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px}.stat{padding:10px 12px}.stat div{font-size:17px;overflow-wrap:anywhere}
+  td,th{padding:6px 5px}.tmeta .exp{float:none;display:block;margin-top:4px}main{padding:12px 12px 50px}}
+@media (max-width:380px){.stat div{font-size:15.5px}}
 </style>
 </head>
 <body>
@@ -753,7 +761,7 @@ document.addEventListener('click', e => {
   openDlg(esc(sp._title || 'Edit'), esc(recs.slice(0, 2).join(' · ')), body, 'Save', () => {
     const changes = [];
     fields.forEach(x => {
-      if (x.lock) return;
+      if (x.lock || ($('#' + x.nm) || {}).disabled) return; // locked, or an MOU box while MOU is not Opted
       let nv = x.kind === 'agents' ? chipVals(x.nm).join(', ') : $('#' + x.nm).value.trim();
       if (x.kind === 'money' || x.kind === 'number') nv = nv === '' ? null : Number(nv); else nv = nv === '' ? null : nv;
       const ov = getF(x.coll, x.o, x.f);
@@ -779,10 +787,10 @@ document.addEventListener('click', e => {
         lab.style.display = ds[x.f] ? '' : 'none'; if (ds[x.f]) lab.childNodes[0].textContent = ds[x.f]; });
       Object.keys(ds).forEach(f => { const x = dets.find(d => d.f === f); if (x) { const lab = $('#' + x.nm).closest('label'); lab.parentNode.appendChild(lab); } }); }; // in the mode's own order
     $('#' + mf.nm).addEventListener('change', () => sync(true)); sync(false); });
-  // MOU: the Payment plan and the six MOU boxes only show when MOU is "Opted"
+  // MOU: the Payment plan and the six MOU boxes are shown but locked (greyed out) until MOU is "Opted"
   const mo = fields.find(x => x.f === 'mouOpted' && x.coll === 'bookings');
   if (mo) { const syncMou = () => { const on = $('#' + mo.nm).value === 'Opted';
-      fields.filter(x => x.coll === mo.coll && x.id === mo.id && MOU_DET.includes(x.f)).forEach(x => { $('#' + x.nm).closest('label').style.display = on ? '' : 'none'; }); };
+      fields.filter(x => x.coll === mo.coll && x.id === mo.id && MOU_DET.includes(x.f)).forEach(x => { const inp = $('#' + x.nm); inp.disabled = !on; inp.closest('label').classList.toggle('off', !on); }); };
     $('#' + mo.nm).addEventListener('change', syncMou); syncMou(); }
 }, true);
 document.addEventListener('keydown', e => {
@@ -1286,12 +1294,12 @@ V.client = id => {
     // Opted), then the six MOU boxes (only when Opted), then the dastavej row. When Not opted the MOU boxes stay in the
     // page hidden, so the pencil can show them as soon as Opted is chosen.
     const mOn = !!b && b.mouOpted === 'Opted';
-    const cell = (k, v, hide) => `<div class="kv"${hide ? ' style="display:none"' : ''}><small>${esc(k)}</small><div>${v}</div></div>`;
+    const cell = (k, v, off) => `<div class="kv${off ? ' off' : ''}"${off ? ' title="Set MOU to Opted to fill this in"' : ''}><small>${esc(k)}</small><div>${v}</div></div>`;
     const sep = '<div class="mou-sep" style="grid-column:1/-1"></div>';
     const mou = b || d ? `<div class="psub">MOU and dastavej</div><div class="grid2 g3 moub">${b ? [
-        cell('MOU', ed('bookings', b, 'mouOpted', 'select', 'mouOpted', b.mouOpted ? `<span class="badge ${mOn ? 'b-sold' : 'b-none'}">${esc(b.mouOpted)}</span>` : '<span class="muted">Not chosen</span>')),
+        cell('MOU', ed('bookings', b, 'mouOpted', 'select', 'mouOpted', b.mouOpted ? `<span class="badge ${mOn ? 'b-sold' : 'b-none'}">${esc(b.mouOpted)}</span>` : '<span class="muted">Not chosen</span>') + (mOn ? '' : '<div class="muted" style="font-size:11.5px;margin-top:3px">Set to Opted to fill in the MOU details</div>')),
         cell('Payment plan', ed('bookings', b, 'mouPlan', 'select', 'mouPlan'), !mOn), '<div></div>',
-        mOn ? sep : '',
+        sep,
         cell('MOU number', ed('bookings', b, 'mouNo'), !mOn), cell('MOU date', ed('bookings', b, 'mouDate', 'date'), !mOn), cell('MOU received till now', ed('bookings', b, 'mouReceived', 'money'), !mOn),
         cell('MOU remaining amount', ed('bookings', b, 'mouRemaining', 'money'), !mOn), cell('MOU tenure', ed('bookings', b, 'mouTenure'), !mOn), cell('MOU EMI', ed('bookings', b, 'mouEmi', 'money'), !mOn)].join('') : ''}
       ${sep}${cell('Dastavej delivery date', d ? ed('dastavej', d, 'deliveryDate', 'date') : '—')}${cell('Date of dastavej', d ? ed('dastavej', d, 'date', 'date') : '—')}${cell('Name on dastavej', d ? ed('dastavej', d, 'client') : '—')}</div>${!d && b && isConvertedBooking(b) && owned.includes(p) ? `<button class="btn small" style="margin:6px 0 10px" data-mkrec="dastavej|${esc(p)}|${esc(id)}">+ Add dastavej details</button>` : ''}` : '';
@@ -1315,7 +1323,7 @@ V.client = id => {
   <div class="row" style="gap:8px">${canDelete() ? `<button class="btn danger" data-del="clients|${esc(id)}|#/clients">Delete folder</button>` : ''}<button class="btn" data-flow="hold" data-cid="${esc(id)}">+ Hold another plot</button></div></div>
   <p class="sub">Sr. ${c.sr} · ${ed('clients', c, 'phone')}${plots.length ? ' · Plot ' + plots.map(esc).join(', ') : ''}${b0.by ? ' · Agent: ' + esc(b0.by) : ''}${vs.length ? ' · Site visit: ' + vs.map(x => `<a data-go="#/visit/${x.id}" style="cursor:pointer;color:var(--accent)" title="${esc(visitSrLabel(x, vsr))}">${fd(x.date)}</a>`).join(', ') : ''}</p>
   ${multi ? `<div class="row" style="gap:6px;margin:0 0 12px;flex-wrap:wrap"><span class="muted" style="font-size:12.5px;margin-right:4px">Show plot</span>${plots.map(pn => `<span class="chip${sel === pn ? ' on' : ''}" data-cid="${esc(id)}" data-csel="${esc(pn)}">Plot ${esc(pn)}</span>`).join('')}<span class="chip${sel === 'all' ? ' on' : ''}" data-cid="${esc(id)}" data-csel="all">All plots</span></div>` : ''}
-  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(128px,1fr))"><div class="stat"><small>Plot no.</small><div>${esc(H.no)}</div></div>
+  <div class="stats" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"><div class="stat"><small>Plot no.</small><div>${esc(H.no)}</div></div>
   <div class="stat"><small>Plot size</small><div>${H.size != null ? (Math.round(H.size * 100) / 100).toLocaleString('en-IN') + ' <span style="font-size:12px;color:var(--ink3)">sq yd</span>' : '—'}</div></div>
   <div class="stat"><small>Price per sq yd</small><div>${perYd != null ? inr(perYd) : '—'}</div></div>
   <div class="stat"><small>Final amount</small><div>${(() => { const fb = sel !== 'all' ? finalBk(sel) : plots.length === 1 ? finalBk(plots[0]) : null;
