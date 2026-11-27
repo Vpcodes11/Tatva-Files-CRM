@@ -23,7 +23,7 @@ with sync_playwright() as p:
     ok(cid is not None, 'found a booked plot with no MOU yet')
     go(f'#/client/{cid}')
     ok(shown() == ALL and off() == DET, 'MOU not chosen: every box shows, the MOU boxes greyed out (%s)' % off())
-    ok('Not chosen' in q("document.querySelector('.moub').innerText") and 'Dastavej status' not in q("document.querySelector('.moub').innerText") and 'Online / cheque' not in q("document.querySelector('.moub').innerText"), 'shows "Not chosen"; old Dastavej status / Online / cheque / Cash boxes are gone')
+    ok(q("!!document.querySelector('.moub [data-mouopt]:not(.on)')") and 'Not opted' in q("document.querySelector('.moub').innerText") and 'Dastavej status' not in q("document.querySelector('.moub').innerText") and 'Online / cheque' not in q("document.querySelector('.moub').innerText"), 'MOU is a switch on the page, off; old Dastavej status / Online / cheque / Cash boxes are gone')
     paid0 = q(f"clientPaid(clientById['{cid}'])")
 
     # one pencil for the whole block; the MOU boxes appear in the form only when Opted is chosen
@@ -31,10 +31,14 @@ with sync_playwright() as p:
     lab = lambda t: f"[...document.querySelectorAll('.dlg label')].find(l => l.childNodes[0].textContent.trim() === '{t}')"
     vis = lambda t: q(f"(l => !!l && l.style.display !== 'none')({lab(t)})")
     en = lambda t: q(f"(l => !!l && !l.querySelector('select, input').disabled)({lab(t)})")
-    ok(vis('MOU number') and not en('MOU number') and not en('Payment plan') and en('MOU'), 'pencil: MOU boxes shown but locked while MOU is not Opted')
+    ok(vis('MOU number') and not en('MOU number') and not en('Payment plan') and not vis('MOU'), 'pencil: MOU boxes shown but locked while the switch is off; the switch is not in the form')
+    a.click('[data-dlgclose] >> nth=0'); a.wait_for_timeout(200)
+    # one click on the switch saves it, no dialog
+    a.click('.moub [data-mouopt]'); a.wait_for_timeout(1200)
+    ok(q("!document.querySelector('#dlg .dlg')") and q(f"bookingById['{bid}'].mouOpted") == 'Opted' and q("!!document.querySelector('.moub [data-mouopt].on')") and off() == [], 'clicking the switch turns MOU on straight away (no dialog), boxes no longer greyed')
+    a.click('.moub >> xpath=preceding-sibling::div[contains(@class,"psub")][1] >> .pen'); a.wait_for_timeout(300)
     sel = lambda t: q(f"{lab(t)}.querySelector('select, input').id")
-    a.select_option('#' + sel('MOU'), 'Opted'); a.wait_for_timeout(100)
-    ok(all(en(t) for t in DET), 'choosing Opted unlocks Payment plan and the six MOU boxes in the form')
+    ok(all(en(t) for t in DET), 'with the switch on, the pencil can edit Payment plan and the six MOU boxes')
     ok(q(f"[...{lab('Payment plan')}.querySelectorAll('option')].map(o => o.textContent).slice(1)") == ['Fixed payment', 'Variable payment'], 'Payment plan choices: Fixed payment / Variable payment')
     a.select_option('#' + sel('Payment plan'), 'Fixed payment')
     for t, v in [('MOU number', 'MOU-0142'), ('MOU date', '2026-11-27'), ('MOU received till now', '300000'), ('MOU remaining amount', '851000'), ('MOU tenure', '12 months'), ('MOU EMI', '70917')]:
@@ -62,11 +66,10 @@ with sync_playwright() as p:
     a.wait_for_timeout(500)
     ok('cannot be lapsed' in r, 'the server refuses to lapse it too: %s' % r)
 
-    # Not opted hides everything MOU again (values are kept)
-    a.click('.moub >> xpath=preceding-sibling::div[contains(@class,"psub")][1] >> .pen'); a.wait_for_timeout(300)
-    a.select_option('#' + sel('MOU'), 'Not opted'); a.wait_for_timeout(100)
-    ok(not en('MOU number'), 'choosing Not opted locks the MOU boxes in the form')
-    a.click('[data-dlgok]'); a.wait_for_timeout(1500)
+    # switch off: MOU boxes greyed again (values are kept)
+    a.click('.moub [data-mouopt]'); a.wait_for_timeout(1200)
+    ok(q(f"bookingById['{bid}'].mouOpted") == 'Not opted', 'clicking the switch again turns MOU off')
+    a.reload(); a.wait_for_selector('#nav a'); go(f'#/client/{cid}')
     ok(off() == DET and 'Not opted' in q("document.querySelector('.moub').innerText") and 'MOU-0142' in q("document.querySelector('.moub').innerText"), 'Not opted: MOU details still shown (kept), greyed out')
     ok(q(f"canLapse(clientById['{cid}'], bookingById['{bid}'])"), 'Not opted: the plot can be lapsed again')
 

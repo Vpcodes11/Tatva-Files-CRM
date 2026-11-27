@@ -787,11 +787,8 @@ document.addEventListener('click', e => {
         lab.style.display = ds[x.f] ? '' : 'none'; if (ds[x.f]) lab.childNodes[0].textContent = ds[x.f]; });
       Object.keys(ds).forEach(f => { const x = dets.find(d => d.f === f); if (x) { const lab = $('#' + x.nm).closest('label'); lab.parentNode.appendChild(lab); } }); }; // in the mode's own order
     $('#' + mf.nm).addEventListener('change', () => sync(true)); sync(false); });
-  // MOU: the Payment plan and the six MOU boxes are shown but locked (greyed out) until MOU is "Opted"
-  const mo = fields.find(x => x.f === 'mouOpted' && x.coll === 'bookings');
-  if (mo) { const syncMou = () => { const on = $('#' + mo.nm).value === 'Opted';
-      fields.filter(x => x.coll === mo.coll && x.id === mo.id && MOU_DET.includes(x.f)).forEach(x => { const inp = $('#' + x.nm); inp.disabled = !on; inp.closest('label').classList.toggle('off', !on); }); };
-    $('#' + mo.nm).addEventListener('change', syncMou); syncMou(); }
+  // MOU: the Payment plan and the six MOU boxes are shown but locked (greyed out) until the MOU switch is on
+  fields.filter(x => x.coll === 'bookings' && MOU_DET.includes(x.f) && x.o.mouOpted !== 'Opted').forEach(x => { const inp = $('#' + x.nm); inp.disabled = true; inp.closest('label').classList.add('off'); inp.closest('label').title = 'Turn the MOU switch on first'; });
 }, true);
 document.addEventListener('keydown', e => {
   if (!$('#dlg').firstChild) return;
@@ -1074,6 +1071,15 @@ function toggleRefund(bid) {
     .then(() => { ch.forEach(([f, v]) => { setF('bookings', b, f, v); editedSet.add('bookings|' + b.id + '|' + f); }); render(); toast(on ? 'Marked refunded' : 'Marked not refunded'); })
     .catch(e => toast(e.message));
 }
+// MOU switch in the client folder: one click saves Opted / Not opted (no dialog). MOU details already typed are kept.
+function toggleMou(bid) {
+  const b = bookingById[bid]; if (!b || saving) return;
+  const v = b.mouOpted === 'Opted' ? 'Not opted' : 'Opted';
+  saving = true;
+  sendOps([{op: 'patch', coll: 'bookings', id: b.id, field: 'mouOpted', value: v, label: describe('bookings', b)}])
+    .then(() => { setF('bookings', b, 'mouOpted', v); editedSet.add('bookings|' + b.id + '|mouOpted'); render(); toast(v === 'Opted' ? 'MOU turned on. Use the pencil to fill in the details.' : 'MOU turned off'); })
+    .catch(e => toast(e.message)).finally(() => { saving = false; });
+}
 function flowDlg(ds) {
   const err = m => { $('#dlg_err').textContent = m; return false; };
   const num = idn => { const x = $(idn).value; return x === '' ? null : Number(x); };
@@ -1297,7 +1303,7 @@ V.client = id => {
     const cell = (k, v, off) => `<div class="kv${off ? ' off' : ''}"${off ? ' title="Set MOU to Opted to fill this in"' : ''}><small>${esc(k)}</small><div>${v}</div></div>`;
     const sep = '<div class="mou-sep" style="grid-column:1/-1"></div>';
     const mou = b || d ? `<div class="psub">MOU and dastavej</div><div class="grid2 g3 moub">${b ? [
-        cell('MOU', ed('bookings', b, 'mouOpted', 'select', 'mouOpted', b.mouOpted ? `<span class="badge ${mOn ? 'b-sold' : 'b-none'}">${esc(b.mouOpted)}</span>` : '<span class="muted">Not chosen</span>') + (mOn ? '' : '<div class="muted" style="font-size:11.5px;margin-top:3px">Set to Opted to fill in the MOU details</div>')),
+        cell('MOU', `<button type="button" class="tgl${mOn ? ' on' : ''}" data-mouopt="${esc(b.id)}" title="${mOn ? 'MOU opted · click to turn off' : 'Click to turn MOU on'}"><i></i>${mOn ? 'Opted' : 'Not opted'}</button>` + (mOn ? '' : '<div class="muted" style="font-size:11.5px;margin-top:3px">Turn on to fill in the MOU details</div>')),
         cell('Payment plan', ed('bookings', b, 'mouPlan', 'select', 'mouPlan'), !mOn), '<div></div>',
         sep,
         cell('MOU number', ed('bookings', b, 'mouNo'), !mOn), cell('MOU date', ed('bookings', b, 'mouDate', 'date'), !mOn), cell('MOU received till now', ed('bookings', b, 'mouReceived', 'money'), !mOn),
@@ -1924,6 +1930,7 @@ document.addEventListener('click', e => {
   const lv = t.closest('[data-lv]'); if (lv) { listView[lv.dataset.lv] = lv.dataset.lv === 'soldReg' ? lv.dataset.val : !!lv.dataset.val; render(); return; }
   const ph = t.closest('[data-phase]'); if (ph) { const k = ph.dataset.phase, o = k === 'after' ? 'before' : 'after'; plotView[k] = !plotView[k]; if (!plotView[k] && !plotView[o]) plotView[o] = true; render(); return; }
   const rf = t.closest('[data-refund]'); if (rf) { toggleRefund(rf.dataset.refund); return; }
+  const mt = t.closest('[data-mouopt]'); if (mt) { toggleMou(mt.dataset.mouopt); return; }
   const cs = t.closest('[data-csel]'); if (cs) { clientSel[cs.dataset.cid] = cs.dataset.csel; render(); return; }
   const pv = t.closest('[data-pv]'); if (pv) { plotView.mode = pv.dataset.pv; render(); return; }
   if (t.closest('[data-addvisit]')) { openAddVisit(); return; }
