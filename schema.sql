@@ -87,3 +87,7 @@ CREATE TABLE IF NOT EXISTS trash (
   restored_by TEXT
 );
 CREATE INDEX IF NOT EXISTS trash_grp ON trash (grp);
+
+-- backups (Nov 2026): full copies of `records`, made nightly (cron), by hand, and before a restore
+CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, note TEXT, n_records INTEGER, by_name TEXT, at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')));
+CREATE TABLE IF NOT EXISTS backup_records (backup_id INTEGER NOT NULL, coll TEXT NOT NULL, id TEXT NOT NULL, sr INTEGER, data TEXT NOT NULL, PRIMARY KEY (backup_id, coll, id));

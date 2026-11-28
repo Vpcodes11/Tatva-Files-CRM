@@ -405,6 +405,7 @@ const isISO = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
 const fd = v => { if (!v) return '—'; const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v); return m ? `<span style="white-space:nowrap">${+m[3]} ${MONTHS[+m[2]-1]} ${m[1]}</span>` : esc(v); };
 const val = v => (v == null || v === '') ? '<span class="muted">—</span>' : esc(v);
 const ICON = {
+  shield:'<path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.2-4.4"/>',
   folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   users:'<circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M16.5 14.2c2.2.2 3.6 1.8 4 4.3"/>',
   grid:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
@@ -1083,7 +1084,7 @@ function renderNavItems(cur) {
     ['expenses', 'Site expenses', 'coins', D.expenses.length], ['incentives', 'Incentives', 'award', D.incentives.length]];
   if (isAgent()) { $('#nav').innerHTML = '<div class="navlabel">Files</div>' + NAV.filter(([k]) => AGENT_PAGES.includes(k)).map(([k, l, i, c]) => `<a class="${cur === k ? 'on' : ''}" data-go="#/${k}">${ico(i)}${esc(k === 'incentives' ? 'My incentives' : l)}${c != null ? `<span class="ct">${c}</span>` : ''}</a>`).join(''); return; }
   $('#nav').innerHTML = '<div class="navlabel">Files</div>' + NAV.map(([k, l, i, c]) => `<a class="${cur === k ? 'on' : ''}" data-go="#/${k}">${ico(i)}${esc(l)}${c != null ? `<span class="ct">${c}</span>` : ''}</a>`).join('') +
-    `<div class="navlabel">Admin</div>${ME.role !== 'Agent' ? `<a class="${cur === 'users' ? 'on' : ''}" data-go="#/users">${ico('users')}Users</a>` : ''}<a class="${cur === 'history' ? 'on' : ''}" data-go="#/history">${ico('clock')}Edit history<span class="ct">${store.edits.filter(e => !e.undone).length}</span></a><a class="${cur === 'check' ? 'on' : ''}" data-go="#/check">${ico('check')}Data check<span class="ct">${D.payments.filter(p => !p.clients.length).length}</span></a>${canDelete() ? `<a class="${cur === 'trash' ? 'on' : ''}" data-go="#/trash">${ico('clock')}Deleted items</a>` : ''}${canExport() ? `<a data-expall>${ico('check')}Export all to Excel</a>` : ''}`;
+    `<div class="navlabel">Admin</div>${ME.role !== 'Agent' ? `<a class="${cur === 'users' ? 'on' : ''}" data-go="#/users">${ico('users')}Users</a>` : ''}<a class="${cur === 'history' ? 'on' : ''}" data-go="#/history">${ico('clock')}Edit history<span class="ct">${store.edits.filter(e => !e.undone).length}</span></a><a class="${cur === 'check' ? 'on' : ''}" data-go="#/check">${ico('check')}Data check<span class="ct">${D.payments.filter(p => !p.clients.length).length}</span></a>${canDelete() ? `<a class="${cur === 'trash' ? 'on' : ''}" data-go="#/trash">${ico('clock')}Deleted items</a>` : ''}${ME.role !== 'Agent' ? `<a class="${cur === 'backups' ? 'on' : ''}" data-go="#/backups">${ico('shield')}Backups</a>` : ''}${canExport() ? `<a data-expall>${ico('check')}Export all to Excel</a>` : ''}`;
 }
 const V = {};
 const plotView = {mode: 'list', hl: new Set(), before: false, after: true};
@@ -1966,6 +1967,36 @@ V.trash = () => {
   return crumbs([['Admin'], ['Deleted items']]) + `<h1>Deleted items</h1><p class="sub">Everything a Super admin deleted, kept in full. Restore puts the records back as they were at the moment of deleting, including any plot or client the delete changed.</p>${t.html}`;
 };
 
+// ---------- Backups (Nov 2026) ----------
+let BACKUPS = null;
+const BK_KIND = {daily: ['Nightly', 'b-sold'], manual: ['By hand', 'b-hold'], 'before-restore': ['Before a restore', 'b-lapsed']};
+const fdt = iso => new Date(iso).toLocaleString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'});
+V.backups = () => {
+  if (ME.role === 'Agent') return '<h1>Backups</h1><p class="muted">Only Admin or Super admin can see backups.</p>';
+  if (!BACKUPS) { api('/api/backups').then(r => { BACKUPS = r; render(); }).catch(e => toast(e.message)); return crumbs([['Admin'], ['Backups']]) + '<h1>Backups</h1><p class="muted">Loading…</p>'; }
+  const last = BACKUPS.backups[0];
+  const t = tbl('backups', [
+    {k: 'at', label: 'Backed up on', type: 'date', get: b => b.at, cell: b => `<b>${fdt(b.at)}</b>`},
+    {k: 'kind', label: 'Type', get: b => (BK_KIND[b.kind] || [b.kind])[0], cell: b => `<span class="badge ${(BK_KIND[b.kind] || [, 'b-none'])[1]}">${esc((BK_KIND[b.kind] || [b.kind])[0])}</span>`},
+    {k: 'n', label: 'Records', type: 'num', get: b => b.n_records},
+    {k: 'by', label: 'By', get: b => b.by_name === 'automatic' ? 'Automatic' : b.by_name},
+    {k: 'act', label: '', nofilter: true, get: () => null, cell: b => `<a class="btn small" href="/api/backups/${b.id}" download data-nogo>Download</a>${canDelete() ? ` <button class="btn small danger" data-bkrestore="${b.id}">Restore</button>` : ''}`}
+  ], BACKUPS.backups, {noun: 'backups'});
+  return crumbs([['Admin'], ['Backups']]) + `<div class="row" style="justify-content:space-between"><h1>Backups</h1><button class="btn primary" data-bknow>Back up now</button></div>
+  <p class="sub">A full copy of every site visit, client, booking, payment, plot and expense is made automatically <b>every night at 2:30 am</b>. The last 30 nightly copies are kept. You can also back up by hand, download any copy as a file to keep on your own computer or Google Drive, and a Super admin can put the data back exactly as it was in any copy.</p>
+  <div class="stats"><div class="stat"><small>Last backup</small><div>${last ? fdt(last.at) : 'None yet'}</div></div><div class="stat"><small>Copies kept</small><div>${BACKUPS.backups.length}</div></div><div class="stat"><small>Records now</small><div>${BACKUPS.live}</div></div></div>
+  ${t.html}`;
+};
+function restoreBackup(id) {
+  const b = BACKUPS.backups.find(x => String(x.id) === String(id)); if (!b) return; const err = m => { $('#dlg_err').textContent = m; return false; };
+  openDlg('Restore this backup?', fdt(b.at), `<div class="warn">Every site visit, client, booking, payment, plot and expense goes back to how it was on <b>${fdt(b.at)}</b>. Anything added or changed after that will be gone from the screens. The data as it is right now is backed up first, so this can be undone by restoring that copy.</div>
+    <label>Type RESTORE to confirm<input id="bk_ok" autocomplete="off" placeholder="RESTORE"></label>`, 'Restore backup', () => {
+    if ($('#bk_ok').value.trim().toUpperCase() !== 'RESTORE') return err('Type RESTORE to confirm.');
+    const btn = $('.dlg [data-dlgok]'); btn.disabled = true;
+    api('/api/backups/' + id + '/restore', {body: {}}).then(r => { closeDlg(); toast('Backup restored: ' + r.records + ' records. Reloading…'); setTimeout(() => location.reload(), 900); }).catch(e => { btn.disabled = false; err(e.message); });
+  });
+}
+
 // ---------- Users ----------
 let USERS = null, usersLoading = false;
 function loadUsers() { if (usersLoading) return; usersLoading = true; api('/api/users').then(r => { USERS = r.users; usersLoading = false; render(); }).catch(e => { usersLoading = false; toast(e.message); }); }
@@ -2075,6 +2106,7 @@ function render() {
   else if (v === 'expenses') html = V.expenses();
   else if (v === 'users') html = V.users();
   else if (v === 'trash') html = V.trash();
+  else if (v === 'backups') html = V.backups();
   else if (v === 'incentives') html = V.incentives();
   else if (v === 'history') html = V.history();
   else if (v === 'check') html = V.check();
@@ -2125,6 +2157,8 @@ document.addEventListener('click', e => {
   const ex = t.closest('[data-exp]'); if (ex) { exportTable(ex.dataset.exp, ex.dataset.fmt); return; }
   if (t.closest('[data-expall]')) { exportAll(); return; }
   const dl = t.closest('[data-del]'); if (dl) { const [c, i, g] = dl.dataset.del.split('|'); deleteDlg(c, i, g); return; }
+  if (t.closest('[data-bknow]')) { const bt = t.closest('[data-bknow]'); bt.disabled = true; api('/api/backups', {body: {}}).then(() => { toast('Backup made.'); BACKUPS = null; render(); }).catch(e => { bt.disabled = false; toast(e.message); }); return; }
+  const bkr = t.closest('[data-bkrestore]'); if (bkr) { restoreBackup(bkr.dataset.bkrestore); return; }
   const rs = t.closest('[data-restore]'); if (rs) { rs.disabled = true; api('/api/restore', {body: {grp: rs.dataset.restore}}).then(r => { toast(r.restored + ' record(s) restored. Reloading…'); setTimeout(() => location.reload(), 900); }).catch(e => { rs.disabled = false; toast(e.message); }); return; }
   if (t.closest('[data-logout]')) { api('/api/logout', {body: {}}).finally(() => location.reload()); return; }
   if (t.closest('[data-mypass]')) { myPasswordDlg(); return; }

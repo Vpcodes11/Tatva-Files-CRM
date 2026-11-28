@@ -13,3 +13,7 @@ binding = "DB"
 database_name = "tatva-crm"
 # Cloudflare D1 database (already created in the Tatva Cloudflare account)
 database_id = "706371f8-abd8-4bef-9e18-f15875f07133"
+
+# Nightly backup of all records at 02:30 India time (21:00 UTC); see makeBackup() in src/worker.js
+[triggers]
+crons = ["0 21 * * *"]

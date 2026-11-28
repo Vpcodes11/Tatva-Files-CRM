@@ -17,6 +17,8 @@ const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, name TEXT NOT NULL, role TEXT NOT NULL CHECK (role IN ('Agent','Admin','Super admin')), pass_hash TEXT NOT NULL, salt TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, failed INTEGER NOT NULL DEFAULT 0, locked_until TEXT, created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), last_login TEXT)`,
   `CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at TEXT NOT NULL)`,
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)`,
+  `CREATE TABLE IF NOT EXISTS backups (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, note TEXT, n_records INTEGER, by_name TEXT, at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))`,
+  `CREATE TABLE IF NOT EXISTS backup_records (backup_id INTEGER NOT NULL, coll TEXT NOT NULL, id TEXT NOT NULL, sr INTEGER, data TEXT NOT NULL, PRIMARY KEY (backup_id, coll, id))`,
   `INSERT OR IGNORE INTO meta (key, value) VALUES ('version', '0')`,
   `CREATE TABLE IF NOT EXISTS trash (id INTEGER PRIMARY KEY AUTOINCREMENT, grp TEXT NOT NULL, coll TEXT NOT NULL, rec_id TEXT NOT NULL, kind TEXT NOT NULL, data TEXT NOT NULL, label TEXT, user_id INTEGER, user_name TEXT, at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')), restored_at TEXT, restored_by TEXT)`,
   `CREATE INDEX IF NOT EXISTS trash_grp ON trash (grp)`
@@ -30,6 +32,7 @@ async function ensureSchema(env) {
   await migrateConvertedToBooked(env);
   await migratePayModes(env);
   await migrateMouOpted(env);
+  if (!(await env.DB.prepare('SELECT COUNT(*) AS n FROM backups').first('n')) && (await env.DB.prepare('SELECT COUNT(*) AS n FROM records').first('n'))) await makeBackup(env, 'manual', 'First backup', 'automatic');
   schemaReady = true;
 }
 
@@ -485,6 +488,58 @@ async function apiImport(env, req, user) {
   return json({ok: true, records: recs.length});
 }
 
+// ---------- backups (Nov 2026) ----------
+// A backup is a full copy of every business record (visits, clients, bookings, payments, plots, …) kept inside D1.
+// Made every night by the cron trigger (wrangler.toml), on "Back up now", and right before a restore. Copied with plain
+// SQL, so it costs almost no Worker time. Kept: the latest 30 nightly copies and the latest 20 of each other kind.
+const KEEP = {daily: 30, manual: 20, 'before-restore': 20};
+const backupStmts = (env, kind, note, by) => [
+  env.DB.prepare('INSERT INTO backups (kind, note, by_name, n_records) VALUES (?, ?, ?, (SELECT COUNT(*) FROM records))').bind(kind, note || null, by || null),
+  env.DB.prepare('INSERT INTO backup_records (backup_id, coll, id, sr, data) SELECT (SELECT MAX(id) FROM backups), coll, id, sr, data FROM records')
+];
+async function pruneBackups(env) {
+  const old = [];
+  for (const [kind, n] of Object.entries(KEEP)) old.push(...(await env.DB.prepare('SELECT id FROM backups WHERE kind = ? ORDER BY id DESC LIMIT -1 OFFSET ?').bind(kind, n).all()).results.map(r => r.id));
+  for (const id of old) await env.DB.batch([env.DB.prepare('DELETE FROM backup_records WHERE backup_id = ?').bind(id), env.DB.prepare('DELETE FROM backups WHERE id = ?').bind(id)]);
+}
+async function makeBackup(env, kind, note, by) {
+  await env.DB.batch(backupStmts(env, kind, note, by));
+  await pruneBackups(env);
+  return env.DB.prepare('SELECT * FROM backups ORDER BY id DESC LIMIT 1').first();
+}
+async function apiBackups(env, req, user) {
+  if (user.role === 'Agent') return fail(403, 'Only Admin or Super admin can see backups.');
+  if (req.method === 'POST') { const b = await makeBackup(env, 'manual', 'Backed up by hand', user.name); return json({ok: true, backup: b}); }
+  const r = await env.DB.prepare('SELECT * FROM backups ORDER BY id DESC').all();
+  return json({backups: r.results, live: await env.DB.prepare('SELECT COUNT(*) AS n FROM records').first('n')});
+}
+// the backup as a file: same layout as the original data file, so it can also be loaded into a fresh, empty database
+async function apiBackupFile(env, user, id) {
+  if (user.role === 'Agent') return fail(403, 'Only Admin or Super admin can download backups.');
+  const b = await env.DB.prepare('SELECT * FROM backups WHERE id = ?').bind(id).first();
+  if (!b) return fail(404, 'This backup is no longer kept.');
+  const rows = (await env.DB.prepare('SELECT coll, id, sr, data FROM backup_records WHERE backup_id = ? ORDER BY coll, sr, id').bind(id).all()).results;
+  const body = '{"tatvaBackup":' + JSON.stringify({id: b.id, kind: b.kind, at: b.at, by: b.by_name, records: rows.length}) + ',"records":[\n' +
+    rows.map(r => '{"coll":' + JSON.stringify(r.coll) + ',"id":' + JSON.stringify(r.id) + ',"sr":' + (r.sr ?? 'null') + ',"data":' + r.data + '}').join(',\n') + '\n]}';
+  const name = 'tatva-crm-backup-' + b.at.slice(0, 16).replace(/[T:]/g, '-') + '.json';
+  return new Response(body, {headers: {'content-type': 'application/json; charset=utf-8', 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'no-store'}});
+}
+// put every record back as it was in a backup. One all-or-nothing step; the data as it is now is backed up first.
+async function apiBackupRestore(env, user, id) {
+  if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can restore a backup.');
+  const b = await env.DB.prepare('SELECT * FROM backups WHERE id = ?').bind(id).first();
+  if (!b) return fail(404, 'This backup is no longer kept.');
+  await env.DB.batch([
+    ...backupStmts(env, 'before-restore', 'Data as it was just before restoring the backup of ' + b.at, user.name),
+    env.DB.prepare('DELETE FROM records'),
+    env.DB.prepare('INSERT INTO records (coll, id, sr, data, updated_at, updated_by) SELECT coll, id, sr, data, ?, ? FROM backup_records WHERE backup_id = ?').bind(now(), 'restore', id),
+    env.DB.prepare('INSERT INTO steps (type, data, user_id, user_name, role) VALUES (?,?,?,?,?)').bind('backup-restore', JSON.stringify({backup: id, at: b.at}), user.id, user.name, user.role),
+    env.DB.prepare("UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'version'")
+  ]);
+  await pruneBackups(env);
+  return json({ok: true, records: await env.DB.prepare('SELECT COUNT(*) AS n FROM records').first('n')});
+}
+
 // ---------- deleted items (Super admin) ----------
 async function apiTrash(env, user) {
   if (user.role !== 'Super admin') return fail(403, 'Only a Super admin can see deleted items.');
@@ -619,6 +674,10 @@ export default {
       if (path === '/api/trash' && req.method === 'GET') return apiTrash(env, user);
       if (path === '/api/restore' && req.method === 'POST') return apiRestore(env, req, user);
       if (path === '/api/users') return apiUsers(env, req, user);
+      if (path === '/api/backups' && (req.method === 'GET' || req.method === 'POST')) return apiBackups(env, req, user);
+      const bk = path.match(/^\/api\/backups\/(\d+)(\/restore)?$/);
+      if (bk && !bk[2] && req.method === 'GET') return apiBackupFile(env, user, Number(bk[1]));
+      if (bk && bk[2] && req.method === 'POST') return apiBackupRestore(env, user, Number(bk[1]));
       const m = path.match(/^\/api\/users\/(\d+)$/);
       if (m && req.method === 'PATCH') return apiUserUpdate(env, req, user, Number(m[1]));
       return fail(404, 'Not found.');
@@ -626,5 +685,9 @@ export default {
       console.error(e);
       return fail(500, 'Something went wrong on the server. Please try again.');
     }
+  },
+  // every night (wrangler.toml [triggers]): a full backup of the records
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil((async () => { await ensureSchema(env); await makeBackup(env, 'daily', 'Nightly backup', 'automatic'); })());
   }
 };
